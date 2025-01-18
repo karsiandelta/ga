@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sunix Chat IRC</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/static/js/chat.js" defer></script>
+</head>
+<body>
+    <div class="chat-container">
+        <header>
+            <h1>🌟 Sunix Chat IRC 🌟</h1>
+        </header>
+        <main id="chat-window">
+            <ul id="messages"></ul>
+        </main>
+        <footer>
+            <form id="chat-form">
+                <input id="message" autocomplete="off" placeholder="Escribe un mensaje..." />
+                <button>Enviar</button>
+            </form>
+        </footer>
+    </div>
+</body>
+</html>

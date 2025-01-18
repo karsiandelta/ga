@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat IRC</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div id="chat-container">
+        <div id="channel-selector">
+            <label for="channel-select">Selecciona un canal:</label>
+            <select id="channel-select">
+                <option value="bienvenida">Bienvenida</option>
+                <option value="amigos">Amigos</option>
+                <option value="libre">Libre</option>
+            </select>
+        </div>
+        
+        <div id="messages"></div>
+
+        <form id="message-form">
+            <input type="text" id="message-input" placeholder="Escribe un mensaje" required>
+            <button type="submit">Enviar</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/static/js/chat.js"></script>
+</body>
+</html>
