@@ -92,15 +92,24 @@ object GeminiClient {
         """.trimIndent()
     }
 
-    /** Prueba los modelos en orden si uno no existe (404). */
+    /**
+     * Prueba los modelos en orden. Si uno está saturado (503/500) reintenta una vez
+     * y luego pasa al siguiente; también salta los que no existen (404) o han agotado su cupo (429).
+     */
     private fun withModels(models: List<String>, block: (String) -> String): String {
         var last: Exception? = null
         for (m in models) {
-            try {
-                return block(m)
-            } catch (e: ApiError) {
-                last = e
-                if (e.code != 404) throw e
+            for (attempt in 0..1) {
+                try {
+                    return block(m)
+                } catch (e: ApiError) {
+                    last = e
+                    when (e.code) {
+                        500, 502, 503, 504 -> if (attempt == 0) Thread.sleep(2_000) else break
+                        404, 429 -> break
+                        else -> throw e
+                    }
+                }
             }
         }
         throw last ?: IOException("No hay modelos disponibles.")
@@ -138,6 +147,7 @@ object GeminiClient {
                 val hint = when (code) {
                     400, 403 -> "Revisa que la clave de API esté bien copiada."
                     404 -> "El modelo \"$model\" no existe."
+                    500, 502, 503, 504 -> "Los servidores de Google están saturados ahora mismo. Prueba en un par de minutos."
                     429 -> if (grounded)
                         "La búsqueda de Google de Gemini no entra en el plan gratis. Desmarca esa opción en la app."
                     else "Has hecho demasiadas consultas seguidas o has llegado al límite gratis de hoy. Prueba en un rato."
