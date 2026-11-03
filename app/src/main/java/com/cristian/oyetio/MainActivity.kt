@@ -186,10 +186,20 @@ class MainActivity : Activity() {
     }
 
     private fun save() {
+        val pasted = keyField.text.toString()
         Prefs.save(
-            this, keyField.text.toString(), modelField.text.toString(), wakeField.text.toString(),
+            this, pasted, modelField.text.toString(), wakeField.text.toString(),
             speakBox.isChecked, instantBox.isChecked
         )
+        val key = Prefs.apiKey(this)
+        if (key != pasted.trim()) keyField.setText(key) // deja solo la clave limpia
+        if (pasted.isNotBlank() && key.isBlank()) {
+            Toast.makeText(
+                this,
+                "Eso no es una clave. En Google AI Studio pulsa \"Create API key\" y copia el código que empieza por AIza",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     private fun saveAndStart() {
