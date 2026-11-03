@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var wakeField: EditText
     private lateinit var speakBox: CheckBox
     private lateinit var instantBox: CheckBox
+    private lateinit var googleBox: CheckBox
     private lateinit var testField: EditText
     private lateinit var lastText: TextView
     private lateinit var checks: TextView
@@ -113,8 +114,13 @@ class MainActivity : Activity() {
             text = "Mostrar al instante (no esperar a sacarlo del bolsillo)"
             isChecked = Prefs.showInstantly(this@MainActivity)
         }
+        googleBox = CheckBox(this).apply {
+            text = "Búsqueda de Google de Gemini (solo si activas facturación en Google; si no, déjalo sin marcar)"
+            isChecked = Prefs.googleSearch(this@MainActivity)
+        }
         col.addView(speakBox)
         col.addView(instantBox)
+        col.addView(googleBox)
 
         // --- Permisos ---
         col.addView(header("Para que funcione con el móvil bloqueado"))
@@ -189,7 +195,7 @@ class MainActivity : Activity() {
         val pasted = keyField.text.toString()
         Prefs.save(
             this, pasted, modelField.text.toString(), wakeField.text.toString(),
-            speakBox.isChecked, instantBox.isChecked
+            speakBox.isChecked, instantBox.isChecked, googleBox.isChecked
         )
         val key = Prefs.apiKey(this)
         if (key != pasted.trim()) keyField.setText(key) // deja solo la clave limpia

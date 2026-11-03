@@ -202,9 +202,10 @@ class ListenService : Service(), RecognitionListener, TextToSpeech.OnInitListene
 
         val key = Prefs.apiKey(this)
         val model = Prefs.model(this)
+        val google = Prefs.googleSearch(this)
         worker.execute {
             val answer = try {
-                GeminiClient.ask(key, model, question)
+                GeminiClient.ask(key, model, question, google)
             } catch (e: Exception) {
                 "No he podido buscarlo.\n${e.message ?: "Sin conexión"}"
             }
