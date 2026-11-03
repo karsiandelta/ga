@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="acc_desc">Permite a Oye Tío pulsar el botón Enviar de WhatsApp por ti, solo justo después de abrir un mensaje que tú has confirmado por voz. No lee ni guarda nada más.</string>
+</resources>

@@ -14,46 +14,109 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * Pregunta a Gemini.
- * - Modo gratis: la app busca en internet (DuckDuckGo), lee las primeras páginas y Gemini lo resume.
- * - Modo Google: Gemini busca con Google él mismo (necesita facturación activada en Google AI Studio).
+ * Cerebro de la app (Google Gemini):
+ * 1) route(): entiende la orden → buscar en internet, responder directamente o enviar/programar un mensaje.
+ * 2) answer(): busca en internet (gratis, DuckDuckGo) y resume para la pantalla de bloqueo.
  */
 object GeminiClient {
 
-    /** Modelos con plan gratuito, por si alguno deja de existir. */
+    /** Modelos con plan gratuito, por si alguno está saturado o deja de existir. */
     private val FALLBACK_MODELS = listOf("gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
+    private val ES = Locale("es", "ES")
 
     private class ApiError(val code: Int, msg: String) : IOException(msg)
 
-    fun ask(apiKey: String, model: String, question: String, googleSearch: Boolean): String {
-        if (apiKey.isBlank()) throw IOException("Falta la clave de API. Abre la app y pégala.")
-        val models = (listOf(model) + FALLBACK_MODELS).distinct()
-        return if (googleSearch) {
-            withModels(models) { m -> call(apiKey, m, systemPrompt(), question, grounded = true) }
-        } else {
-            val context = webContext(apiKey, models, question)
-            val prompt = "PETICIÓN DEL USUARIO (dictada por voz): $question\n\n$context"
-            withModels(models) { m -> call(apiKey, m, systemPrompt(), prompt, grounded = false) }
-        }
+    sealed class Route {
+        data class Search(val queries: List<String>) : Route()
+        data class Answer(val text: String) : Route()
+        data class Message(val app: String, val contact: String, val text: String, val at: Long) : Route()
     }
 
-    // ---------- Búsqueda gratis ----------
+    private fun models(model: String) = (listOf(model) + FALLBACK_MODELS).distinct()
 
-    private fun webContext(apiKey: String, models: List<String>, question: String): String {
-        // 1) Gemini convierte lo dictado en 1-2 búsquedas buenas
-        val queries = runCatching {
-            withModels(models) { m ->
-                call(
-                    apiKey, m,
-                    "Convierte la petición dictada por voz en 1 o 2 búsquedas web cortas en español, " +
-                        "una por línea, sin numerar ni comillas. Corrige palabras mal reconocidas. " +
-                        "Para viajes incluye una búsqueda de horarios y otra de precios.",
-                    question, grounded = false
+    // ---------- 1) Entender la orden ----------
+
+    fun route(apiKey: String, model: String, question: String): Route {
+        if (apiKey.isBlank()) throw IOException("Falta la clave de API. Abre la app y pégala en Ajustes.")
+        val nowHuman = SimpleDateFormat("EEEE d 'de' MMMM 'de' yyyy, HH:mm", ES).format(Date())
+        val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US).format(Date())
+        val sys = """
+            Eres el cerebro de "Oye Tío", un asistente de voz en español de España.
+            Ahora es $nowHuman (formato ISO: $nowIso).
+            La orden viene de un dictado por voz y puede tener palabras mal reconocidas o sin tildes: interpreta lo que quiso decir.
+            Devuelve SOLO un objeto JSON con UNA de estas formas:
+
+            1) Enviar o programar un mensaje ("mándale", "escríbele", "dile a", "envía un WhatsApp", "SMS a", "recuérdale a"...):
+            {"tipo":"mensaje","app":"whatsapp","contacto":"nombre tal como lo dijo","texto":"el mensaje","cuando":""}
+               - "app": "sms" solo si dice SMS o mensaje de texto; en cualquier otro caso "whatsapp".
+               - "texto": el mensaje bien escrito, con tildes, mayúscula inicial y puntuación, tal como lo enviaría el usuario en primera persona.
+                 Ejemplo: "dile a mamá que llego a las 8" → "Llego a las 8."
+               - "cuando": "" si es para ahora; si dice una fecha u hora, "YYYY-MM-DDTHH:MM" calculado desde la fecha actual
+                 ("mañana a las 9" → mañana 09:00; "a las 5 de la tarde" → hoy 17:00, o mañana si ya ha pasado; "dentro de 2 horas" → ahora + 2 h).
+
+            2) Preguntas que necesitan información actual de internet (horarios, precios, noticias, tiempo, resultados, tiendas, eventos...):
+            {"tipo":"buscar","busquedas":["búsqueda 1","búsqueda 2"]}
+               - 1 o 2 búsquedas web cortas en español. Para viajes, una de horarios y otra de precios.
+
+            3) Cosas que puedes responder bien sin internet (cálculos, definiciones, consejos generales, la hora o la fecha):
+            {"tipo":"responder","texto":"respuesta corta, sin markdown, máximo 8 líneas, primera línea como título"}
+        """.trimIndent()
+        val raw = withModels(models(model)) { m -> call(apiKey, m, sys, question, grounded = false, json = true) }
+        return parseRoute(raw, question)
+    }
+
+    private fun parseRoute(raw: String, question: String): Route = try {
+        val s = raw.trim()
+        val o = JSONObject(s.substring(s.indexOf('{'), s.lastIndexOf('}') + 1))
+        when (o.optString("tipo").lowercase(Locale.ROOT)) {
+            "mensaje" -> {
+                val contact = o.optString("contacto").trim()
+                val text = o.optString("texto").trim()
+                if (contact.isEmpty() || text.isEmpty()) Route.Search(listOf(question))
+                else Route.Message(
+                    if (o.optString("app").lowercase(Locale.ROOT).contains("sms")) "sms" else "whatsapp",
+                    contact, text, parseWhen(o.optString("cuando"))
                 )
-            }.lines().map { it.trim().trim('-', '•', '"', ' ') }.filter { it.isNotEmpty() }.take(2)
-        }.getOrNull().orEmpty().ifEmpty { listOf(question) }
+            }
+            "responder" -> o.optString("texto").trim().let {
+                if (it.isEmpty()) Route.Search(listOf(question)) else Route.Answer(clean(it))
+            }
+            else -> {
+                val arr = o.optJSONArray("busquedas")
+                val qs = (0 until (arr?.length() ?: 0))
+                    .map { arr!!.optString(it).trim() }
+                    .filter { it.isNotEmpty() }
+                    .take(2)
+                Route.Search(qs.ifEmpty { listOf(question) })
+            }
+        }
+    } catch (e: Exception) {
+        Route.Search(listOf(question))
+    }
 
-        // 2) Busca y lee las primeras páginas en paralelo
+    private fun parseWhen(s: String): Long {
+        val t = s.trim()
+        if (t.isEmpty()) return 0L
+        for (f in listOf("yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm")) {
+            val d = try {
+                SimpleDateFormat(f, Locale.US).apply { isLenient = false }.parse(t)
+            } catch (e: Exception) { null }
+            if (d != null) return d.time
+        }
+        return 0L
+    }
+
+    // ---------- 2) Buscar y responder ----------
+
+    fun answer(apiKey: String, model: String, question: String, queries: List<String>, googleSearch: Boolean): String {
+        if (googleSearch) {
+            return clean(withModels(models(model)) { m -> call(apiKey, m, answerPrompt(), question, grounded = true, json = false) })
+        }
+        val prompt = "PETICIÓN DEL USUARIO (dictada por voz): $question\n\n${webContext(queries)}"
+        return clean(withModels(models(model)) { m -> call(apiKey, m, answerPrompt(), prompt, grounded = false, json = false) })
+    }
+
+    private fun webContext(queries: List<String>): String {
         val results = queries.flatMap { WebSearcher.search(it, 5) }.distinctBy { it.url }.take(8)
         if (results.isEmpty()) return "RESULTADOS DE BÚSQUEDA: no se ha podido buscar en internet ahora mismo."
 
@@ -74,10 +137,8 @@ object GeminiClient {
         return sb.toString()
     }
 
-    // ---------- Llamada a la API ----------
-
-    private fun systemPrompt(): String {
-        val now = SimpleDateFormat("EEEE d 'de' MMMM 'de' yyyy, HH:mm", Locale("es", "ES")).format(Date())
+    private fun answerPrompt(): String {
+        val now = SimpleDateFormat("EEEE d 'de' MMMM 'de' yyyy, HH:mm", ES).format(Date())
         return """
             Eres "Oye Tío", un asistente de voz. Ahora es $now y el usuario está en España.
             La petición viene de un dictado por voz: puede tener palabras mal reconocidas y sin tildes; interpreta lo que quiso decir.
@@ -92,9 +153,11 @@ object GeminiClient {
         """.trimIndent()
     }
 
+    // ---------- Llamada a la API ----------
+
     /**
-     * Prueba los modelos en orden. Si uno está saturado (503/500) reintenta una vez
-     * y luego pasa al siguiente; también salta los que no existen (404) o han agotado su cupo (429).
+     * Prueba los modelos en orden. Si uno está saturado (5xx) reintenta una vez y pasa al siguiente;
+     * también salta los que no existen (404) o han agotado su cupo (429).
      */
     private fun withModels(models: List<String>, block: (String) -> String): String {
         var last: Exception? = null
@@ -115,7 +178,7 @@ object GeminiClient {
         throw last ?: IOException("No hay modelos disponibles.")
     }
 
-    private fun call(apiKey: String, model: String, system: String, user: String, grounded: Boolean): String {
+    private fun call(apiKey: String, model: String, system: String, user: String, grounded: Boolean, json: Boolean): String {
         val body = JSONObject().apply {
             put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
             put("contents", JSONArray().put(
@@ -123,6 +186,7 @@ object GeminiClient {
                     .put("parts", JSONArray().put(JSONObject().put("text", user)))
             ))
             if (grounded) put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
+            if (json) put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
         }
 
         val safeModel = URLEncoder.encode(model, "UTF-8")
@@ -147,10 +211,10 @@ object GeminiClient {
                 val hint = when (code) {
                     400, 403 -> "Revisa que la clave de API esté bien copiada."
                     404 -> "El modelo \"$model\" no existe."
-                    500, 502, 503, 504 -> "Los servidores de Google están saturados ahora mismo. Prueba en un par de minutos."
                     429 -> if (grounded)
-                        "La búsqueda de Google de Gemini no entra en el plan gratis. Desmarca esa opción en la app."
+                        "La búsqueda de Google de Gemini no entra en el plan gratis. Desactiva esa opción en Ajustes."
                     else "Has hecho demasiadas consultas seguidas o has llegado al límite gratis de hoy. Prueba en un rato."
+                    500, 502, 503, 504 -> "Los servidores de Google están saturados ahora mismo. Prueba en un par de minutos."
                     else -> ""
                 }
                 throw ApiError(code, "Error $code: $hint\n($msg)")
@@ -165,7 +229,7 @@ object GeminiClient {
                 val p = parts.getJSONObject(i)
                 if (!p.optBoolean("thought", false)) sb.append(p.optString("text", ""))
             }
-            return clean(sb.toString())
+            return sb.toString()
         } finally {
             conn.disconnect()
         }
