@@ -2,6 +2,14 @@
 
 App de Android que escucha con el móvil bloqueado. Dices **"oye tío, busca trenes Albacete Alicante…"**, busca en internet con la IA de Google (Gemini + búsqueda de Google) y, cuando sacas el móvil del bolsillo, se enciende la pantalla con la respuesta resumida, sin desbloquear.
 
+## Novedades v2.0
+
+- Interfaz neón futurista con núcleo animado que reacciona a tu voz, también en la pantalla de bloqueo.
+- Oído mejorado a distancia: ganancia automática, reducción de ruido, «oye tío» con reconocedor dedicado y la orden con el reconocedor de Google. Sensibilidad ajustable de 1 a 10.
+- WhatsApp y SMS por voz, al momento o programados: «oye tío, dile a mamá por WhatsApp que llego a las 8», «programa un WhatsApp para mañana a las 9 a Juan: feliz cumpleaños». Siempre pide confirmación («sí» / «no» o botones).
+  - SMS: se envía aunque el móvil esté bloqueado.
+  - WhatsApp: necesita el móvil desbloqueado; si está bloqueado, se envía solo al desbloquear. Con el permiso de accesibilidad pulsa «Enviar» por ti.
+
 ## Cómo funciona
 
 1. La palabra "oye tío" y tu frase se reconocen **en el propio móvil, sin internet** (modelo Vosk en español).
