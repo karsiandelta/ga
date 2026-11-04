@@ -14,7 +14,12 @@ data class Msg(
     val text: String,
     val at: Long,      // 0 = ahora
 ) {
-    val appLabel: String get() = if (app == "sms") "SMS" else "WhatsApp"
+    val appLabel: String get() = when (app) {
+        "sms" -> "SMS"
+        "llamada" -> "Llamada"
+        "recordatorio" -> "Recordatorio"
+        else -> "WhatsApp"
+    }
 
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("app", app).put("name", name)

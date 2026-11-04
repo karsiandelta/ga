@@ -56,6 +56,7 @@ class ListenService : Service(), TextToSpeech.OnInitListener {
         const val ACTION_ASK = "com.cristian.oyetio.ASK"
         const val ACTION_SPEAK = "com.cristian.oyetio.SPEAK"
         const val ACTION_RELOAD = "com.cristian.oyetio.RELOAD"
+        const val ACTION_SAY = "com.cristian.oyetio.SAY"
         const val EXTRA_TEXT = "text"
 
         @Volatile var running = false
@@ -134,6 +135,11 @@ class ListenService : Service(), TextToSpeech.OnInitListener {
             ACTION_ASK -> {
                 ensureEngine()
                 intent.getStringExtra(EXTRA_TEXT)?.takeIf { it.isNotBlank() }?.let { handleCommand(it) }
+            }
+            ACTION_SAY -> {
+                ensureEngine()
+                val t = intent.getStringExtra(EXTRA_TEXT).orEmpty()
+                if (!busy && captureHandler == null) speak(t) { startWake() }
             }
             ACTION_SPEAK -> {
                 ensureEngine()
@@ -318,6 +324,7 @@ class ListenService : Service(), TextToSpeech.OnInitListener {
     private fun startWake() {
         if (model == null || busy) return
         finishCapture()
+        unduck()
         phase = Phase.WAKE
         resetRecs = true
         setState(State.IDLE, "Di «${Prefs.wakeWord(this)}»")
@@ -326,6 +333,7 @@ class ListenService : Service(), TextToSpeech.OnInitListener {
 
     private fun onWake(inline: String?) {
         if (busy || phase != Phase.CAPTURE) return
+        duck()
         signal()
         if (inline != null) {
             stopMic()
@@ -482,20 +490,32 @@ class ListenService : Service(), TextToSpeech.OnInitListener {
         val model = Prefs.model(this)
         val googleSearch = Prefs.googleSearch(this)
         worker.execute {
-            var message: GeminiClient.Route.Message? = null
+            var route: GeminiClient.Route? = null
             val text: String = try {
                 when (val r = GeminiClient.route(key, model, question)) {
                     is GeminiClient.Route.Answer -> r.text
                     is GeminiClient.Route.Search -> GeminiClient.answer(key, model, question, r.queries, googleSearch)
-                    is GeminiClient.Route.Message -> { message = r; "" }
+                    else -> { route = r; "" }
                 }
             } catch (e: Exception) {
                 "No he podido hacerlo.\n${e.message ?: "Sin conexión"}"
             }
-            val msg = message
+            val r = route
             main.post {
                 busy = false
-                if (msg != null) prepareMessage(question, msg) else deliver(question, text)
+                when (r) {
+                    is GeminiClient.Route.Message -> prepareMessage(question, r)
+                    is GeminiClient.Route.Reminder -> {
+                        val m = Msg((System.currentTimeMillis() % 1_000_000_000L).toInt(), "recordatorio", "", "", r.text, r.at)
+                        quickReply(question, Messenger.execute(this, m), speakIt = true)
+                    }
+                    is GeminiClient.Route.Action -> {
+                        unduck()
+                        val res = Phone.run(this, r.o)
+                        quickReply(question, res.text, res.speak)
+                    }
+                    else -> deliver(question, text)
+                }
             }
         }
     }
@@ -517,6 +537,37 @@ class ListenService : Service(), TextToSpeech.OnInitListener {
         if (Prefs.speakAloud(this)) speak(answer) { startWake() } else startWake()
     }
 
+    /** Respuesta de una acción rápida: aviso corto, sin esperar a sacar el móvil del bolsillo. */
+    private fun quickReply(question: String, text: String, speakIt: Boolean) {
+        Prefs.saveLast(this, question, text)
+        Notify.result(this, text.lineSequence().firstOrNull() ?: "Hecho", text, popup = false, ongoing = false)
+        vibrate(longArrayOf(0, 120))
+        if (speakIt || Prefs.speakAloud(this)) speak(text) { startWake() } else startWake()
+    }
+
+    // Baja el volumen de la música mientras te escucha o te habla
+    private var focusReq: android.media.AudioFocusRequest? = null
+
+    private fun duck() {
+        if (focusReq != null) return
+        val am = getSystemService(AudioManager::class.java)
+        if (!am.isMusicActive) return
+        val r = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            ).build()
+        am.requestAudioFocus(r)
+        focusReq = r
+    }
+
+    private fun unduck() {
+        focusReq?.let { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(it) }
+        focusReq = null
+    }
+
     private fun showOnScreen() {
         val a = Prefs.lastAnswer(this)
         Notify.result(this, a.lineSequence().firstOrNull() ?: "Respuesta", a, popup = true, ongoing = false)
@@ -528,7 +579,7 @@ class ListenService : Service(), TextToSpeech.OnInitListener {
         val contact = try {
             Messenger.findContact(this, r.contact)
         } catch (e: SecurityException) {
-            deliver(question, "Necesito permiso de contactos.\nAbre Oye Tío y toca «Micrófono, contactos, SMS y avisos».")
+            deliver(question, "Necesito permiso de contactos.\nAbre Oye Tío y toca «Micrófono, contactos, SMS, llamadas y avisos».")
             return
         }
         if (contact == null) {
@@ -677,6 +728,7 @@ class ListenService : Service(), TextToSpeech.OnInitListener {
         try { unregisterReceiver(unlockReceiver) } catch (_: Exception) {}
         finishCapture()
         stopMic()
+        unduck()
         pocket?.stop()
         releaseWakeLock()
         freeRec?.close()

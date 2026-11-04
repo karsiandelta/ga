@@ -30,6 +30,8 @@ object GeminiClient {
         data class Search(val queries: List<String>) : Route()
         data class Answer(val text: String) : Route()
         data class Message(val app: String, val contact: String, val text: String, val at: Long) : Route()
+        data class Reminder(val text: String, val at: Long) : Route()
+        data class Action(val o: JSONObject) : Route()
     }
 
     private fun models(model: String) = (listOf(model) + FALLBACK_MODELS).distinct()
@@ -58,8 +60,36 @@ object GeminiClient {
             {"tipo":"buscar","busquedas":["búsqueda 1","búsqueda 2"]}
                - 1 o 2 búsquedas web cortas en español. Para viajes, una de horarios y otra de precios.
 
-            3) Cosas que puedes responder bien sin internet (cálculos, definiciones, consejos generales, la hora o la fecha):
+            3) Cosas que puedes responder bien sin internet (cálculos, definiciones, consejos generales, la hora o la fecha, charlar):
             {"tipo":"responder","texto":"respuesta corta, sin markdown, máximo 8 líneas, primera línea como título"}
+
+            4) Música (Spotify): "pon…", "reproduce…", "quiero escuchar…", "pausa", "siguiente", "qué suena":
+            {"tipo":"musica","orden":"reproducir","busqueda":"lo que hay que buscar en Spotify","enfoque":"cancion|artista|album|lista|cualquiera","artista":"","titulo":""}
+               - "orden": "reproducir", "pausa", "seguir", "siguiente", "anterior" o "que_suena".
+               - Corrige nombres de artistas y canciones mal dictados ("bat bani" → "Bad Bunny").
+               - "pon música para estudiar" → busqueda "música para estudiar", enfoque "lista".
+
+            5) Volumen: {"tipo":"volumen","orden":"subir|bajar|fijar|silencio|maximo","nivel":0-100}
+
+            6) Linterna: {"tipo":"linterna","encender":true o false}
+
+            7) Alarma: {"tipo":"alarma","hora":"HH:MM","texto":"etiqueta corta"}
+
+            8) Temporizador o cuenta atrás: {"tipo":"temporizador","segundos":número,"texto":"etiqueta corta"}
+
+            9) Recordatorio ("recuérdame…", "avísame…"): {"tipo":"recordatorio","texto":"lo que hay que recordar","cuando":"YYYY-MM-DDTHH:MM"}
+
+            10) Llamar por teléfono: {"tipo":"llamar","contacto":"nombre tal como lo dijo"}
+
+            11) Abrir una app: {"tipo":"abrir_app","app":"nombre de la app"}
+
+            12) Ir a un sitio / ruta / navegar: {"tipo":"navegar","destino":"lugar"}
+
+            13) Leer mensajes o avisos recibidos ("qué me han escrito", "lee mis WhatsApp"): {"tipo":"notificaciones","app":"whatsapp|telegram|sms|correo|todas"}
+
+            14) Batería: {"tipo":"bateria"}
+
+            Si pide algo que el móvil no permite (encender wifi, bluetooth…), usa "responder" y explica cómo hacerlo a mano en una línea.
         """.trimIndent()
         val raw = withModels(models(model)) { m -> call(apiKey, m, sys, question, grounded = false, json = true) }
         return parseRoute(raw, question)
@@ -77,6 +107,18 @@ object GeminiClient {
                     if (o.optString("app").lowercase(Locale.ROOT).contains("sms")) "sms" else "whatsapp",
                     contact, text, parseWhen(o.optString("cuando"))
                 )
+            }
+            "musica", "volumen", "linterna", "alarma", "temporizador", "abrir_app", "navegar", "notificaciones", "bateria" ->
+                Route.Action(o)
+            "llamar" -> o.optString("contacto").trim().let {
+                if (it.isEmpty()) Route.Answer("¿A quién llamo?") else Route.Message("llamada", it, "", 0L)
+            }
+            "recordatorio" -> {
+                val text = o.optString("texto").trim()
+                val at = parseWhen(o.optString("cuando"))
+                if (text.isEmpty()) Route.Answer("¿Qué quieres que te recuerde?")
+                else if (at <= System.currentTimeMillis()) Route.Answer("¿Para cuándo quieres el recordatorio de «$text»?")
+                else Route.Reminder(text, at)
             }
             "responder" -> o.optString("texto").trim().let {
                 if (it.isEmpty()) Route.Search(listOf(question)) else Route.Answer(clean(it))

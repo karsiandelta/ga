@@ -121,13 +121,13 @@ object Notify {
             c, 12, Intent(c, ActionReceiver::class.java).setAction(ActionReceiver.CANCEL), FLAGS
         )
         val scheduled = m.at > System.currentTimeMillis() + 60_000
-        val title = (if (scheduled) "¿Programar " else "¿Enviar ") + "${m.appLabel} a ${m.name}?"
-        val text = (if (scheduled) Messenger.describeWhen(m.at) + " · " else "") + "“${m.text}”"
+        val title = if (m.app == "llamada") "¿Llamar a ${m.name}?" else (if (scheduled) "¿Programar " else "¿Enviar ") + "${m.appLabel} a ${m.name}?"
+        val text = if (m.app == "llamada") "+" + Messenger.intl(m.phone) else (if (scheduled) Messenger.describeWhen(m.at) + " · " else "") + "“${m.text}”"
         val b = base(c, if (popup) CH_POPUP else CH_MSG, title, text)
             .setContentIntent(open)
             .setAutoCancel(true)
             .setCategory(Notification.CATEGORY_MESSAGE)
-            .addAction(Notification.Action.Builder(null, if (scheduled) "Programar" else "Enviar", send).build())
+            .addAction(Notification.Action.Builder(null, if (m.app == "llamada") "Llamar" else if (scheduled) "Programar" else "Enviar", send).build())
             .addAction(Notification.Action.Builder(null, "Cancelar", cancel).build())
         if (popup) b.setFullScreenIntent(open, true)
         nm(c).notify(ID_CONFIRM, b.build())
@@ -145,6 +145,23 @@ object Notify {
         nm(c).notify(
             msgId(m),
             base(c, CH_MSG, title, text).setContentIntent(pi).setAutoCancel(true).setTimeoutAfter(30 * 60 * 1000L).build()
+        )
+    }
+
+    fun action(c: Context, title: String, text: String, pi: PendingIntent) {
+        nm(c).notify(6000 + (title.hashCode() and 0xFF), base(c, CH_MSG, title, text).setContentIntent(pi).setAutoCancel(true).build())
+    }
+
+    fun reminder(c: Context, text: String) {
+        val open = PendingIntent.getActivity(c, 4, Intent(c, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        nm(c).notify(
+            7000 + Random.nextInt(1000),
+            base(c, CH_MSG, "⏰ Recordatorio", text)
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .setFullScreenIntent(open, false)
+                .build()
         )
     }
 

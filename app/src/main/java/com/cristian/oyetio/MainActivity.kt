@@ -82,7 +82,7 @@ class MainActivity : Activity() {
             Neon.glow(Neon.text(this, "OYE TÍO", 26f, Neon.TEXT, Neon.COND, 0.3f), Neon.CYAN, 14f),
             LinearLayout.LayoutParams(0, -2, 1f)
         )
-        head.addView(Neon.text(this, "v2.0\nNEURAL·LINK", 9f, Neon.DIM, Neon.MONO, 0.2f).apply { gravity = Gravity.END })
+        head.addView(Neon.text(this, "v2.1\nNEURAL·LINK", 9f, Neon.DIM, Neon.MONO, 0.2f).apply { gravity = Gravity.END })
         col.addView(head)
 
         // ---- Núcleo ----
@@ -106,7 +106,10 @@ class MainActivity : Activity() {
                 this,
                 "Di «oye tío», espera la vibración y habla.\n" +
                     "Mensajes: «oye tío, dile a mamá por WhatsApp que llego a las 8» · " +
-                    "«programa un WhatsApp para mañana a las 9 a Juan: feliz cumpleaños» · «manda un SMS a Ana…»",
+                    "«programa un WhatsApp para mañana a las 9 a Juan: feliz cumpleaños» · «manda un SMS a Ana…»\n" +
+                    "Más: «pon Bad Bunny en Spotify» · «pausa» · «sube el volumen» · «enciende la linterna» · " +
+                    "«alarma a las 7» · «temporizador de 10 minutos» · «recuérdame mañana a las 9 llamar al médico» · " +
+                    "«llama a mamá» · «abre Instagram» · «llévame a Alicante» · «lee mis WhatsApp» · «cuánta batería tengo»",
                 12f, Neon.DIM
             ).apply {
                 gravity = Gravity.CENTER
@@ -326,8 +329,8 @@ class MainActivity : Activity() {
             setPadding(px(14), px(12), px(14), px(12))
         }
         box.addView(Neon.text(this, tag, 10f, color, Neon.MONO, 0.15f))
-        box.addView(Neon.text(this, "${m.appLabel.uppercase()} → ${m.name}", 16f, Neon.TEXT, Neon.COND, 0.04f), Neon.lp(this, top = 4))
-        box.addView(Neon.text(this, "“${m.text}”", 14f, Neon.DIM), Neon.lp(this, top = 2))
+        box.addView(Neon.text(this, "${m.appLabel.uppercase()}${if (m.name.isNotBlank()) " → ${m.name}" else ""}", 16f, Neon.TEXT, Neon.COND, 0.04f), Neon.lp(this, top = 4))
+        if (m.text.isNotBlank()) box.addView(Neon.text(this, "“${m.text}”", 14f, Neon.DIM), Neon.lp(this, top = 2))
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actions.forEachIndexed { i, (label, c, fn) ->
             row.addView(Neon.button(this, label, c) { fn() }, LinearLayout.LayoutParams(0, -2, 1f).apply {
@@ -343,7 +346,10 @@ class MainActivity : Activity() {
     private data class Perm(val name: String, val desc: String, val ok: Boolean?, val fix: () -> Unit)
 
     private fun basicPerms(): List<String> {
-        val l = mutableListOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)
+        val l = mutableListOf(
+            Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_CONTACTS,
+            Manifest.permission.SEND_SMS, Manifest.permission.CALL_PHONE
+        )
         if (Build.VERSION.SDK_INT >= 33) l += Manifest.permission.POST_NOTIFICATIONS
         return l
     }
@@ -351,7 +357,7 @@ class MainActivity : Activity() {
     private fun permissions(): List<Perm> {
         val list = mutableListOf<Perm>()
         list += Perm(
-            "Micrófono, contactos, SMS y avisos", "Imprescindible",
+            "Micrófono, contactos, SMS, llamadas y avisos", "Imprescindible",
             basicPerms().all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
         ) { requestBasicPermissions() }
         if (Build.VERSION.SDK_INT >= 34) {
@@ -368,6 +374,13 @@ class MainActivity : Activity() {
             "Mostrar sobre otras apps", "Para abrir WhatsApp desde segundo plano",
             Settings.canDrawOverlays(this)
         ) { tryStart(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }
+        list += Perm(
+            "Acceso a notificaciones", "Controlar Spotify bloqueado y leerte tus mensajes",
+            Phone.listenerEnabled(this)
+        ) {
+            toast("Activa «Oye Tío». Si sale «Ajuste restringido»: Ajustes › Apps › Oye Tío › ⋮ › Permitir ajustes restringidos.")
+            tryStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
         list += Perm(
             "Envío automático de WhatsApp", "Accesibilidad: pulsa «Enviar» por ti",
             accessibilityOn()

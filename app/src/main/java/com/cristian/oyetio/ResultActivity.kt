@@ -173,10 +173,12 @@ class ResultActivity : Activity() {
             setPadding(px(18), px(18), px(18), px(18))
             addView(Neon.text(this@ResultActivity, "“${m.text}”", 21f, Neon.TEXT).apply { setLineSpacing(0f, 1.2f) })
         }
-        body.addView(card, Neon.lp(this, top = 18))
-        animateIn(card, 0)
+        if (m.text.isNotBlank()) {
+            body.addView(card, Neon.lp(this, top = 18))
+            animateIn(card, 0)
+        }
 
-        bar.addView(Neon.button(this, if (scheduled) "✓ Programar" else "✓ Enviar", Neon.GREEN, filled = true) {
+        bar.addView(Neon.button(this, if (m.app == "llamada") "✓ Llamar" else if (scheduled) "✓ Programar" else "✓ Enviar", Neon.GREEN, filled = true) {
             send(m, scheduled)
         }, LinearLayout.LayoutParams(0, -2, 1f))
         bar.addView(Neon.button(this, "✕ Cancelar", Neon.MAGENTA) {
@@ -188,7 +190,7 @@ class ResultActivity : Activity() {
 
     private fun send(m: Msg, scheduled: Boolean) {
         val km = getSystemService(KeyguardManager::class.java)
-        if (m.app != "sms" && !scheduled && km.isKeyguardLocked) {
+        if (m.app == "whatsapp" && !scheduled && km.isKeyguardLocked) {
             // WhatsApp necesita el móvil desbloqueado: pide la huella y lo envía
             km.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
                 override fun onDismissSucceeded() { done(Messenger.confirmPending(this@ResultActivity)) }

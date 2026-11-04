@@ -133,7 +133,8 @@ object Messenger {
     }
 
     fun confirmQuestion(m: Msg): String =
-        if (m.at > System.currentTimeMillis() + 60_000)
+        if (m.app == "llamada") "¿Llamo a ${m.name}?"
+        else if (m.at > System.currentTimeMillis() + 60_000)
             "¿Programo un ${m.appLabel} para ${m.name}, ${describeWhen(m.at)}, que diga: ${m.text}?"
         else
             "¿Envío un ${m.appLabel} a ${m.name} que diga: ${m.text}?"
@@ -153,9 +154,11 @@ object Messenger {
     }
 
     fun execute(c: Context, m: Msg): String =
-        if (m.at > System.currentTimeMillis() + 60_000) {
+        if (m.app == "llamada") Phone.call(c, m.phone)
+        else if (m.at > System.currentTimeMillis() + 60_000) {
             Scheduler.add(c, m)
-            "Programado: ${m.appLabel} para ${m.name} ${describeWhen(m.at)}."
+            if (m.app == "recordatorio") "Te lo recordaré ${describeWhen(m.at)}."
+            else "Programado: ${m.appLabel} para ${m.name} ${describeWhen(m.at)}."
         } else deliverNow(c, m)
 
     // ---------- Envío ----------
@@ -166,6 +169,20 @@ object Messenger {
         }
 
     fun deliverNow(c: Context, m: Msg): String {
+        if (m.app == "llamada") return Phone.call(c, m.phone)
+        if (m.app == "recordatorio") {
+            Notify.reminder(c, m.text)
+            if (ListenService.running) {
+                try {
+                    c.startService(
+                        Intent(c, ListenService::class.java)
+                            .setAction(ListenService.ACTION_SAY)
+                            .putExtra(ListenService.EXTRA_TEXT, "Recordatorio: ${m.text}")
+                    )
+                } catch (_: Exception) {}
+            }
+            return "Recordatorio: ${m.text}"
+        }
         if (m.app == "sms") {
             return try {
                 sendSms(c, m)
