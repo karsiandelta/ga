@@ -48,7 +48,7 @@ void fragment() {
 	col = mix(col, mud, max(road, arena) * 0.92);
 	col = mix(col, cobble, town * 0.95);
 	col = mix(col, silt, 1.0 - smoothstep(-2.1, -1.3, wp.y + (n3 - 0.5) * 0.4));
-	ALBEDO = col;
+	ALBEDO = col * 2.4;
 	ROUGHNESS = mix(0.95, 0.55, town * cob);
 	SPECULAR = 0.2;
 }
@@ -94,7 +94,7 @@ void fragment() {
 	vec3 tip = mix(vec3(0.085, 0.115, 0.055), vec3(0.20, 0.185, 0.10), n1);
 	vec3 col = mix(base, tip, hf);
 	col = mix(col, vec3(0.16, 0.15, 0.14) * (0.4 + 0.8 * hf), smoothstep(150.0, 260.0, length(wp.xz)) * 0.8);
-	ALBEDO = col;
+	ALBEDO = col * 2.4;
 	ROUGHNESS = 0.85;
 	SPECULAR = 0.15;
 }
@@ -112,7 +112,7 @@ void fragment() {
 	float n1 = texture(noise_tex, wp.xz * 0.03 + TIME * vec2(0.010, 0.006)).r;
 	float n2 = texture(noise_tex, wp.xz * 0.08 - TIME * vec2(0.012, 0.010)).r;
 	float w = n1 * n2;
-	ALBEDO = mix(vec3(0.003, 0.010, 0.010), vec3(0.018, 0.045, 0.035), clamp(w * 2.2, 0.0, 1.0));
+	ALBEDO = mix(vec3(0.008, 0.024, 0.026), vec3(0.04, 0.10, 0.085), clamp(w * 2.2, 0.0, 1.0));
 	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 	ALPHA = mix(0.78, 0.97, fres);
 	ROUGHNESS = 0.06;
@@ -128,8 +128,8 @@ shader_type sky;
 uniform sampler2D noise_tex : repeat_enable, filter_linear;
 void sky() {
 	vec3 d = normalize(EYEDIR);
-	vec3 top = vec3(0.010, 0.018, 0.034);
-	vec3 horizon = vec3(0.13, 0.060, 0.045);
+	vec3 top = vec3(0.030, 0.050, 0.085);
+	vec3 horizon = vec3(0.30, 0.13, 0.09);
 	vec3 col = mix(horizon, top, pow(clamp(d.y, 0.0, 1.0), 0.33));
 	if (d.y < 0.0) {
 		col = mix(horizon, vec3(0.03, 0.035, 0.04), clamp(-d.y * 4.0, 0.0, 1.0));
@@ -141,7 +141,7 @@ void sky() {
 		vec2 uv = d.xz / (d.y + 0.18);
 		float c = texture(noise_tex, uv * 0.11).r * 0.65 + texture(noise_tex, uv * 0.37 + vec2(0.3, 0.1)).r * 0.35;
 		float m = smoothstep(0.43, 0.63, c) * smoothstep(0.01, 0.2, d.y);
-		vec3 lit = mix(vec3(0.020, 0.024, 0.032), vec3(0.11, 0.12, 0.15), clamp(c * 1.4 - 0.5, 0.0, 1.0));
+		vec3 lit = mix(vec3(0.05, 0.058, 0.075), vec3(0.24, 0.26, 0.32), clamp(c * 1.4 - 0.5, 0.0, 1.0));
 		lit += moon * pow(s, 8.0) * 0.25;
 		lit = mix(lit, vec3(0.16, 0.06, 0.04), (1.0 - smoothstep(0.0, 0.25, d.y)) * 0.6);
 		col = mix(col, lit, m * 0.95);

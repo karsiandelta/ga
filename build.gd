@@ -31,7 +31,7 @@ static func metal(c: Color, rough: float = 0.42) -> StandardMaterial3D:
 		return _mats[k]
 	var m = StandardMaterial3D.new()
 	m.albedo_color = c
-	m.metallic = 0.65
+	m.metallic = 0.45
 	m.roughness = rough
 	m.rim_enabled = true
 	m.rim = 0.35
@@ -135,12 +135,12 @@ static func humanoid(o: Dictionary) -> Dictionary:
 	var root = Node3D.new()
 	var body = Node3D.new()
 	root.add_child(body)
-	var steel = metal(Color("565b63"))
+	var steel = metal(Color("7a808a"))
 	if style == "lord":
-		steel = metal(Color("1d1c20"), 0.35)
-	var leather = mat(Color("2b211b"), a)
+		steel = metal(Color("2c2a30"), 0.35)
+	var leather = mat(Color("46352a"), a)
 	var cloth = mat(accent, a)
-	var dcloth = mat(Color("1b1a20"), a)
+	var dcloth = mat(Color("302e3a"), a)
 	if style == "wraith":
 		dcloth = mat(Color("9fd8c8"), a)
 	var bone = mat(Color("cfc6ae"))

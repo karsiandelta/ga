@@ -30,10 +30,10 @@ var CLASES = {
 		"s2": {"n": "Curar", "t": "heal", "cd": 16.0}},
 }
 var TIPOS = {
-	"lobo": {"n": "Huargo", "hp": 0.8, "dmg": 0.8, "spd": 6.5, "range": 2.0, "quad": true, "col": Color("23232b"), "s": 0.9, "ghost": false, "boss": false},
-	"jabali": {"n": "Jabalí corrupto", "hp": 1.3, "dmg": 1.0, "spd": 5.5, "range": 2.2, "quad": true, "col": Color("33261f"), "s": 1.15, "ghost": false, "boss": false},
+	"lobo": {"n": "Huargo", "hp": 0.8, "dmg": 0.8, "spd": 6.5, "range": 2.0, "quad": true, "col": Color("353540"), "s": 0.9, "ghost": false, "boss": false},
+	"jabali": {"n": "Jabalí corrupto", "hp": 1.3, "dmg": 1.0, "spd": 5.5, "range": 2.2, "quad": true, "col": Color("4a372c"), "s": 1.15, "ghost": false, "boss": false},
 	"bandido": {"n": "Esqueleto", "hp": 1.0, "dmg": 1.1, "spd": 6.0, "range": 2.3, "quad": false, "col": Color("4a4038"), "s": 1.0, "ghost": false, "boss": false},
-	"tigre": {"n": "Bestia de ceniza", "hp": 1.4, "dmg": 1.4, "spd": 7.5, "range": 2.4, "quad": true, "col": Color("2b2725"), "s": 1.3, "ghost": false, "boss": false},
+	"tigre": {"n": "Bestia de ceniza", "hp": 1.4, "dmg": 1.4, "spd": 7.5, "range": 2.4, "quad": true, "col": Color("3a3432"), "s": 1.3, "ghost": false, "boss": false},
 	"espectro": {"n": "Espectro", "hp": 1.1, "dmg": 1.2, "spd": 6.2, "range": 2.3, "quad": false, "col": Color("8fd8c8"), "s": 1.0, "ghost": true, "boss": false},
 	"jefe": {"n": "Señor de Ceniza", "hp": 30.0, "dmg": 1.6, "spd": 5.2, "range": 4.0, "quad": false, "col": Color("2a1a18"), "s": 2.6, "ghost": false, "boss": true},
 }
@@ -244,16 +244,17 @@ func build_env() -> void:
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("5a6a86")
-	env.ambient_light_energy = 0.75
-	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_white = 5.0
+	env.ambient_light_color = Color("6c7c9a")
+	env.ambient_light_energy = 1.5
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.5
+	env.tonemap_white = 4.0
 	env.glow_enabled = true
 	env.glow_intensity = 0.7
 	env.glow_bloom = 0.05
 	env.fog_enabled = true
-	env.fog_light_color = Color("1e252c")
-	env.fog_density = 0.011
+	env.fog_light_color = Color("3a4550")
+	env.fog_density = 0.008
 	env.fog_sky_affect = 0.25
 	env.fog_aerial_perspective = 0.3
 	env.adjustment_enabled = true
@@ -264,7 +265,7 @@ func build_env() -> void:
 	add_child(we)
 	var moon = DirectionalLight3D.new()
 	moon.light_color = Color("a9c0e8")
-	moon.light_energy = 1.7
+	moon.light_energy = 3.0
 	moon.shadow_enabled = true
 	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	moon.directional_shadow_max_distance = 80.0
@@ -393,13 +394,13 @@ func build_props() -> void:
 	trunk_mesh.bottom_radius = 0.4
 	trunk_mesh.height = 3.6
 	trunk_mesh.radial_segments = 7
-	trunk_mesh.material = Build.mat(Color("17120f"))
+	trunk_mesh.material = Build.mat(Color("2a211b"))
 	var branch_mesh = CylinderMesh.new()
 	branch_mesh.top_radius = 0.02
 	branch_mesh.bottom_radius = 0.1
 	branch_mesh.height = 2.0
 	branch_mesh.radial_segments = 5
-	branch_mesh.material = Build.mat(Color("17120f"))
+	branch_mesh.material = Build.mat(Color("2a211b"))
 	var top_mesh = SphereMesh.new()
 	top_mesh.radius = 1.5
 	top_mesh.height = 3.0
@@ -431,11 +432,11 @@ func build_props() -> void:
 			branches.set_instance_transform(i * 5 + j, Transform3D(bb, base_p + bb * Vector3(0, 1.0, 0)))
 		var k = randf()
 		var bare = k < 0.38
-		var c = Color.from_hsv(randf_range(0.27, 0.40), 0.5, randf_range(0.10, 0.17))
+		var c = Color.from_hsv(randf_range(0.27, 0.40), 0.5, randf_range(0.22, 0.34))
 		if k > 0.85:
-			c = Color.from_hsv(randf_range(0.98, 1.0), 0.85, 0.30)
+			c = Color.from_hsv(randf_range(0.98, 1.0), 0.85, 0.5)
 		elif k > 0.75:
-			c = Color.from_hsv(0.08, 0.2, 0.22)
+			c = Color.from_hsv(0.08, 0.2, 0.42)
 		for j in range(3):
 			var off = Vector3(randf_range(-0.9, 0.9), randf_range(-0.4, 0.7), randf_range(-0.9, 0.9)) * s
 			if j == 0:
@@ -463,12 +464,12 @@ func build_props() -> void:
 		var s = randf_range(0.6, 2.4)
 		var b = Basis(Vector3(1, 0, 0), randf() * 3.0).rotated(Vector3.UP, randf() * 3.0).scaled(Vector3(s, s * 0.75, s))
 		rocks.set_instance_transform(i, Transform3D(b, Vector3(x, ground_h(x, z) + s * 0.25, z)))
-		var g = randf_range(0.13, 0.2)
+		var g = randf_range(0.28, 0.4)
 		rocks.set_instance_color(i, Color(g, g, g * 1.1))
 		if s > 1.1:
 			colliders.append({"x": x, "z": z, "r": s * 0.85, "stone": false})
 	# ruinas dispersas
-	var stone_m = Build.mat(Color("46464c"))
+	var stone_m = Build.mat(Color("74747c"))
 	for i in range(16):
 		var a = randf() * TAU
 		var d = randf_range(55.0, 260.0)
@@ -491,7 +492,7 @@ func build_props() -> void:
 		var fallen = Build.cyl(self, 0.42, 0.42, 3.5, stone_m, at(cx + 1.0, 0.35, cz), 10)
 		fallen.rotation = Vector3(PI / 2.0, randf() * 3.0, 0)
 	# cementerio al oeste de la aldea
-	var grave_m = Build.mat(Color("3c3d42"))
+	var grave_m = Build.mat(Color("6c6d75"))
 	for i in range(22):
 		var gx = -36.0 + (i % 6) * 2.6 - 6.0 + randf_range(-0.4, 0.4)
 		var gz = 4.0 + int(i / 6.0) * 3.2 - 5.0 + randf_range(-0.4, 0.4)
@@ -538,12 +539,12 @@ func sparks(parent: Node3D, pos: Vector3, col: Color, amount: int, radius: float
 
 
 func house(x: float, z: float, w: float, rot: float, kind: int) -> void:
-	var stone = Build.mat(Color("3a3a3f"))
-	var plaster = Build.mat(Color("4a4640"))
+	var stone = Build.mat(Color("5c5c63"))
+	var plaster = Build.mat(Color("7a7468"))
 	if kind == 2:
-		plaster = Build.mat(Color("44454b"))
-	var timber = Build.mat(Color("120e0c"))
-	var slate = Build.mat(Color("16181d"))
+		plaster = Build.mat(Color("6a6b73"))
+	var timber = Build.mat(Color("211914"))
+	var slate = Build.mat(Color("2c3038"))
 	var d = w * 0.8
 	var g = Node3D.new()
 	g.position = at(x, 0.0, z)
@@ -625,7 +626,7 @@ func build_village() -> void:
 	house(-10, 12, 5, 0.9, 0)
 	house(15, -12, 6.5, -0.2, 2)
 	# puerta norte de piedra
-	var stone = Build.mat(Color("36363b"))
+	var stone = Build.mat(Color("5c5c63"))
 	var iron = Build.metal(Color("1c1c20"), 0.6)
 	for x in [-4.5, 4.5]:
 		Build.box(self, Vector3(1.6, 7, 1.6), stone, Vector3(x, 3.5, -24))
