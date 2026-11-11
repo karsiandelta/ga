@@ -1,0 +1,100 @@
+name: Compilar Cielo Roto
+
+on:
+  push:
+    branches: [cielo-roto]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_TAG: 4.3-stable
+  GODOT_DIR: 4.3.stable
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Caché de Godot
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot-bin
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_TAG }}-android-v1
+
+      - name: Descargar Godot y plantillas de exportación
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p ~/godot-bin ~/dl ~/.local/share/godot/export_templates/$GODOT_DIR
+          cd ~/dl
+          curl -L --retry 3 -o godot.zip https://github.com/godotengine/godot/releases/download/$GODOT_TAG/Godot_v${GODOT_TAG}_linux.x86_64.zip
+          curl -L --retry 3 -o tpl.zip https://github.com/godotengine/godot/releases/download/$GODOT_TAG/Godot_v${GODOT_TAG}_export_templates.tpz
+          unzip -q godot.zip
+          mv Godot_v${GODOT_TAG}_linux.x86_64 ~/godot-bin/godot
+          chmod +x ~/godot-bin/godot
+          unzip -q tpl.zip
+          mv templates/android_debug.apk templates/android_release.apk templates/android_source.zip templates/version.txt ~/.local/share/godot/export_templates/$GODOT_DIR/
+          rm -rf ~/dl
+
+      - name: Configurar Godot para Android
+        run: |
+          set -e
+          mkdir -p ~/.config/godot
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $BT"
+          for f in editor_settings-4.3.tres editor_settings-4.tres; do
+          cat > ~/.config/godot/$f <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$GITHUB_WORKSPACE/android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+          done
+          cat ~/.config/godot/editor_settings-4.3.tres
+
+      - name: Importar el proyecto
+        run: ~/godot-bin/godot --headless --import 2>&1 | tee import.log || true
+
+      - name: Probar el juego con las cuatro clases
+        run: |
+          fail=0
+          for c in guerrero asesino mago chaman; do
+            echo "=== $c ==="
+            CR_TEST=$c timeout 300 ~/godot-bin/godot --headless --fixed-fps 30 2>&1 | tee test-$c.log || true
+            if grep -qE "SCRIPT ERROR|Parse Error|Failed to load script" test-$c.log; then echo "::error::Errores de script con $c"; fail=1; fi
+            if ! grep -q "CR_TEST_OK" test-$c.log; then echo "::error::La prueba de $c no terminó"; fail=1; fi
+          done
+          exit $fail
+
+      - name: Exportar APK
+        run: |
+          set -e
+          mkdir -p build
+          sed -i "s/^version\/code=.*/version\/code=${{ github.run_number }}/; s/^version\/name=.*/version\/name=\"0.${{ github.run_number }}\"/" export_presets.cfg
+          ~/godot-bin/godot --headless --verbose --export-debug "Android" build/CieloRoto.apk 2>&1 | tee export.log | tail -60
+          ls -la build
+          test -s build/CieloRoto.apk
+
+      - name: Publicar para descargar desde el móvil
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cielo-roto-v${{ github.run_number }}
+          name: Cielo Roto v${{ github.run_number }}
+          target_commitish: cielo-roto
+          body: Descarga CieloRoto.apk desde el móvil e instálalo.
+          files: build/CieloRoto.apk
