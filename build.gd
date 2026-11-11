@@ -135,7 +135,7 @@ static func humanoid(o: Dictionary) -> Dictionary:
 	var root = Node3D.new()
 	var body = Node3D.new()
 	root.add_child(body)
-	var steel = metal(Color("7a808a"))
+	var steel = metal(Color("666b74"))
 	if style == "lord":
 		steel = metal(Color("2c2a30"), 0.35)
 	var leather = mat(Color("46352a"), a)

@@ -247,7 +247,7 @@ func build_env() -> void:
 	env.ambient_light_color = Color("6c7c9a")
 	env.ambient_light_energy = 1.5
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.5
+	env.tonemap_exposure = 1.3
 	env.tonemap_white = 4.0
 	env.glow_enabled = true
 	env.glow_intensity = 0.7

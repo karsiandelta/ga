@@ -35,8 +35,8 @@ void fragment() {
 	vec3 ash = vec3(0.085, 0.080, 0.078) * (0.7 + 0.6 * n2);
 	grass = mix(grass, ash, smoothstep(150.0, 260.0, dist) * 0.85);
 	vec3 mud = vec3(0.070, 0.055, 0.045) * (0.75 + 0.5 * n3) * (0.8 + 0.4 * n1);
-	float cob = smoothstep(0.42, 0.5, fract(n3 * 5.0 + n2 * 3.0));
-	vec3 cobble = mix(vec3(0.045, 0.045, 0.05), vec3(0.13, 0.125, 0.12), cob) * (0.8 + 0.4 * n1);
+	float cob = smoothstep(0.35, 0.65, texture(noise_tex, wp.xz * 0.33).r);
+	vec3 cobble = mix(vec3(0.045, 0.045, 0.052), vec3(0.078, 0.075, 0.074), cob) * (0.85 + 0.3 * n3) * (0.85 + 0.3 * n1);
 	vec3 rock = vec3(0.075, 0.075, 0.085) * (0.6 + 0.8 * n2) * (0.8 + 0.4 * n3);
 	vec3 silt = vec3(0.085, 0.075, 0.06) * (0.8 + 0.3 * n3);
 	float slope = 1.0 - normalize(wn).y;
