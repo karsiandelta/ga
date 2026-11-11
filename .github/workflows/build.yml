@@ -83,7 +83,7 @@ jobs:
 
       - name: Render real con capturas (comprueba shaders)
         run: |
-          mkdir -p shots
+          mkdir -p shots && touch shots/.gdignore
           which xvfb-run || (sudo apt-get update -qq; sudo apt-get install -y -qq xvfb > /dev/null) || true
           CR_TEST=guerrero CR_SHOTS=$PWD/shots LIBGL_ALWAYS_SOFTWARE=1 timeout 600 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot-bin/godot --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 1280x720 --fixed-fps 30 > render.log 2>&1 || true
           grep -E "ERROR|WARNING|OpenGL|CR_TEST|at:" render.log | head -60 || true
