@@ -243,15 +243,15 @@ func build_env() -> void:
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color("a9b8c8")
-	env.ambient_light_energy = 0.6
+	env.ambient_light_energy = 0.42
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_white = 6.0
 	env.glow_enabled = true
-	env.glow_intensity = 0.7
+	env.glow_intensity = 0.45
 	env.glow_bloom = 0.08
 	env.fog_enabled = true
-	env.fog_light_color = Color("d6c4a8")
-	env.fog_density = 0.0055
+	env.fog_light_color = Color("aebcc4")
+	env.fog_density = 0.0028
 	env.fog_sky_affect = 0.15
 	env.fog_aerial_perspective = 0.4
 	env.adjustment_enabled = true
@@ -262,7 +262,7 @@ func build_env() -> void:
 	add_child(we)
 	var sun = DirectionalLight3D.new()
 	sun.light_color = Color("ffdfb0")
-	sun.light_energy = 1.5
+	sun.light_energy = 1.15
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	sun.directional_shadow_max_distance = 80.0
@@ -325,7 +325,7 @@ func build_water() -> void:
 
 
 func build_grass() -> void:
-	var verts = PackedVector3Array([Vector3(-0.07, 0, 0), Vector3(0.07, 0, 0), Vector3(-0.045, 0.45, 0), Vector3(0.045, 0.45, 0), Vector3(0, 0.9, 0)])
+	var verts = PackedVector3Array([Vector3(-0.04, 0, 0), Vector3(0.04, 0, 0), Vector3(-0.027, 0.3, 0), Vector3(0.027, 0.3, 0), Vector3(0, 0.62, 0)])
 	var uvs = PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(0, 0.5), Vector2(1, 0.5), Vector2(0.5, 1)])
 	var idx = PackedInt32Array([0, 1, 2, 1, 3, 2, 2, 3, 4])
 	var arrays = []
@@ -337,7 +337,7 @@ func build_grass() -> void:
 	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	grass_mat = Sh.mat(Sh.GRASS, {"noise_tex": noise_tex, "hmap": hmap_tex, "player_pos": Vector3.ZERO})
 	am.surface_set_material(0, grass_mat)
-	var count = 16000
+	var count = 30000
 	var mm = MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = am
@@ -757,10 +757,10 @@ func slash_fx(arc: float, rng: float) -> void:
 	im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 	for i in range(13):
 		var a = -arc / 2.0 + arc * i / 12.0
-		im.surface_add_vertex(Vector3(sin(a) * rng * 0.45, 0, cos(a) * rng * 0.45))
+		im.surface_add_vertex(Vector3(sin(a) * rng * 0.74, 0, cos(a) * rng * 0.74))
 		im.surface_add_vertex(Vector3(sin(a) * rng, 0, cos(a) * rng))
 	im.surface_end()
-	var m = Build.flat(Color("fff2c8"), 0.75)
+	var m = Build.flat(Color("fff2c8"), 0.5)
 	var mi = MeshInstance3D.new()
 	mi.mesh = im
 	mi.material_override = m

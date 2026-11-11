@@ -14,13 +14,13 @@ static func mat(c: Color, alpha: float = 1.0) -> StandardMaterial3D:
 	m.albedo_color = Color(c.r, c.g, c.b, alpha)
 	m.roughness = 0.8
 	m.rim_enabled = true
-	m.rim = 0.35
+	m.rim = 0.12
 	m.rim_tint = 0.5
 	if alpha < 1.0:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.emission_enabled = true
 		m.emission = c
-		m.emission_energy_multiplier = 0.6
+		m.emission_energy_multiplier = 0.15
 	_mats[k] = m
 	return m
 
@@ -214,7 +214,7 @@ static func quad(col: Color, s: float, kind: String = "") -> Dictionary:
 	var root = Node3D.new()
 	var m = mat(col)
 	var d = mat(col.darkened(0.55))
-	var light = mat(col.lightened(0.35))
+	var light = mat(col.lightened(0.15))
 	var b = capsule(root, 0.33, 1.45, m, Vector3(0, 0.82, 0))
 	b.rotation.x = PI / 2.0
 	var belly = capsule(root, 0.26, 1.2, light, Vector3(0, 0.72, 0))

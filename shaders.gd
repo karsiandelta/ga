@@ -34,7 +34,7 @@ void fragment() {
 	vec3 grass = mix(vec3(0.07, 0.16, 0.04), vec3(0.16, 0.24, 0.05), n1) * (0.75 + 0.5 * n2);
 	vec3 dry = vec3(0.30, 0.24, 0.08) * (0.75 + 0.5 * n2);
 	grass = mix(grass, dry, smoothstep(170.0, 270.0, dist) * 0.7);
-	vec3 dirt = vec3(0.21, 0.15, 0.09) * (0.7 + 0.6 * n3);
+	vec3 dirt = vec3(0.17, 0.14, 0.11) * (0.8 + 0.25 * n3) * (0.85 + 0.3 * n1);
 	vec3 rock = vec3(0.20, 0.19, 0.18) * (0.6 + 0.8 * n2) * (0.8 + 0.4 * n3);
 	vec3 sand = vec3(0.42, 0.36, 0.22) * (0.8 + 0.3 * n3);
 	float slope = 1.0 - normalize(wn).y;
@@ -87,7 +87,7 @@ void vertex() {
 }
 void fragment() {
 	float n1 = texture(noise_tex, wp.xz * 0.02).r;
-	vec3 base = mix(vec3(0.07, 0.16, 0.04), vec3(0.16, 0.24, 0.05), n1) * 0.9;
+	vec3 base = mix(vec3(0.10, 0.21, 0.05), vec3(0.20, 0.29, 0.07), n1);
 	vec3 tip = mix(vec3(0.22, 0.40, 0.08), vec3(0.42, 0.46, 0.12), n1);
 	vec3 col = mix(base, tip, hf);
 	col = mix(col, vec3(0.42, 0.34, 0.12) * (0.6 + 0.6 * hf), smoothstep(170.0, 270.0, length(wp.xz)) * 0.7);
