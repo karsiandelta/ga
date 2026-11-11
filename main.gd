@@ -1809,7 +1809,7 @@ func set_preview(reino: String, clase: String) -> void:
 	if preview_light == null:
 		preview_light = OmniLight3D.new()
 		preview_light.light_color = Color("ffe2c0")
-		preview_light.light_energy = 3.5
+		preview_light.light_energy = 1.4
 		preview_light.omni_range = 9.0
 		preview_light.position = PV + Vector3(-1.8, 2.8, 3.0)
 		add_child(preview_light)

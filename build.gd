@@ -192,13 +192,13 @@ static func humanoid(o: Dictionary) -> Dictionary:
 	var body = Node3D.new()
 	root.add_child(body)
 	var gold = cmat(Color("d1a548"), 1.0, 0.4)
-	var steel = cmat(Color("8a93a3"), 1.0, 0.4)
+	var steel = cmat(Color("5f6878"), 1.0, 0.4)
 	if style == "lord":
 		steel = cmat(Color("2c2a33"), 1.0, 0.4)
 		gold = cmat(Color("8a3a1a"), 1.0, 0.4)
 	var leather = cmat(Color("4a3528"), a)
 	var cloth = cmat(accent, a)
-	var bone = cmat(Color("e2d8bc"))
+	var bone = cmat(Color("c9bfa4"))
 	var skin = cmat(Color("e0b594"))
 	var black = cmat(Color("15131a"))
 	# color principal del traje según la clase
@@ -389,7 +389,7 @@ static func humanoid(o: Dictionary) -> Dictionary:
 			hood.scale = Vector3(1.0, 1.0, 1.08)
 			var tipc = cyl(hd, 0.0, 0.2, 0.46, mainm, Vector3(0, 0.52, -0.2), 8)
 			tipc.rotation.x = -0.9
-			box(hd, Vector3(0.36, 0.17, 0.12), cloth, Vector3(0, 0.15, 0.17))
+			box(hd, Vector3(0.36, 0.17, 0.12), black, Vector3(0, 0.15, 0.17))
 			var hr = torus(hd, 0.22, 0.255, gold, Vector3(0, 0.3, 0.14))
 			hr.rotation.x = PI / 2.0 - 0.25
 			hr.scale = Vector3(1.0, 0.4, 1.0)
