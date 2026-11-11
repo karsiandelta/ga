@@ -75,11 +75,30 @@ jobs:
           fail=0
           for c in guerrero asesino mago chaman; do
             echo "=== $c ==="
-            CR_TEST=$c timeout 300 ~/godot-bin/godot --headless --fixed-fps 30 2>&1 | tee test-$c.log || true
+            CR_TEST=$c timeout 300 ~/godot-bin/godot --headless --fixed-fps 30 2>&1 | grep -v -e 'Parameter "m" is null' -e 'mesh_get_surface_count' | tee test-$c.log || true
             if grep -qE "SCRIPT ERROR|Parse Error|Failed to load script" test-$c.log; then echo "::error::Errores de script con $c"; fail=1; fi
             if ! grep -q "CR_TEST_OK" test-$c.log; then echo "::error::La prueba de $c no terminó"; fail=1; fi
           done
           exit $fail
+
+      - name: Render real con capturas (comprueba shaders)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-vulkan-drivers libvulkan1 > /dev/null
+          mkdir -p shots
+          CR_TEST=guerrero CR_SHOTS=$PWD/shots timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot-bin/godot --rendering-method mobile --resolution 1280x720 --fixed-fps 30 2>&1 | tee render.log | grep -E "ERROR|WARNING|Vulkan|OpenGL|CR_TEST|at:" | head -80 || true
+          ls -la shots
+          if grep -qE "SHADER ERROR|SCRIPT ERROR|Shader compilation failed" render.log; then echo "::error::Errores de shader"; grep -B2 -A12 -E "SHADER ERROR|Shader compilation failed" render.log | head -120; exit 1; fi
+          grep -q "CR_TEST_OK" render.log
+
+      - name: Guardar capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas
+          path: |
+            shots
+            render.log
 
       - name: Exportar APK
         run: |

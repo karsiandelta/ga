@@ -3,6 +3,9 @@ extends Node3D
 
 const Build = preload("res://build.gd")
 const Hud = preload("res://hud.gd")
+const Sh = preload("res://shaders.gd")
+const GRID = 128
+const CELL = 5.0
 const SAVE_PATH = "user://cieloroto.json"
 const CH = [95, 90, 80, 70, 60, 50, 40, 30, 22]
 const SMITH = Vector2(8, -6)
@@ -89,6 +92,11 @@ var mark: MeshInstance3D
 var bar_mat_r: StandardMaterial3D
 var bar_mat_b: StandardMaterial3D
 var hud
+var hdata = PackedFloat32Array()
+var noise_tex: NoiseTexture2D
+var hmap_tex: ImageTexture
+var grass_mat: ShaderMaterial
+var shot_dir = ""
 
 var test_mode = false
 var test_f = 0
@@ -96,9 +104,13 @@ var test_f = 0
 
 func _ready() -> void:
 	randomize()
+	build_noise()
+	build_height()
 	build_env()
-	build_ground()
+	build_terrain()
+	build_water()
 	build_props()
+	build_grass()
 	build_village()
 	bar_mat_r = bar_material(Color("cf4a40"))
 	bar_mat_b = bar_material(Color("63c4a4"))
@@ -121,7 +133,7 @@ func _ready() -> void:
 		nums.append({"n": l, "life": 0.0})
 	cam = Camera3D.new()
 	cam.fov = 58.0
-	cam.far = 320.0
+	cam.far = 700.0
 	cam.near = 0.3
 	add_child(cam)
 	cam.make_current()
@@ -165,75 +177,179 @@ func load_save():
 
 # ---------- mundo ----------
 
+func build_noise() -> void:
+	var n = FastNoiseLite.new()
+	n.seed = 3
+	n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	n.frequency = 0.012
+	n.fractal_octaves = 4
+	noise_tex = NoiseTexture2D.new()
+	noise_tex.width = 256
+	noise_tex.height = 256
+	noise_tex.seamless = true
+	noise_tex.generate_mipmaps = true
+	noise_tex.noise = n
+
+
+func build_height() -> void:
+	var noise = FastNoiseLite.new()
+	noise.seed = 11
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.007
+	noise.fractal_octaves = 4
+	var n1 = GRID + 1
+	hdata.resize(n1 * n1)
+	var img = Image.create(n1, n1, false, Image.FORMAT_RH)
+	for j in range(n1):
+		for i in range(n1):
+			var x = -320.0 + i * CELL
+			var z = -320.0 + j * CELL
+			var d = Vector2(x, z).length()
+			var h = noise.get_noise_2d(x, z) * 13.0
+			h = max(h, -3.2)
+			h *= smoothstep(27.0, 70.0, d)
+			h = lerp(1.5, h, smoothstep(16.0, 45.0, Vector2(x, z + 215.0).length()))
+			h = lerp(h, -3.2, smoothstep(293.0, 316.0, d))
+			hdata[j * n1 + i] = h
+			img.set_pixel(i, j, Color(h, 0, 0))
+	hmap_tex = ImageTexture.create_from_image(img)
+
+
+func ground_h(x: float, z: float) -> float:
+	var gx = clamp((x + 320.0) / CELL, 0.0, GRID - 0.001)
+	var gz = clamp((z + 320.0) / CELL, 0.0, GRID - 0.001)
+	var ix = int(gx)
+	var iz = int(gz)
+	var tx = gx - ix
+	var tz = gz - iz
+	var n1 = GRID + 1
+	var a = hdata[iz * n1 + ix]
+	var b = hdata[iz * n1 + ix + 1]
+	var c = hdata[(iz + 1) * n1 + ix]
+	var d = hdata[(iz + 1) * n1 + ix + 1]
+	return lerp(lerp(a, b, tx), lerp(c, d, tx), tz)
+
+
+func at(x: float, y: float, z: float) -> Vector3:
+	return Vector3(x, ground_h(x, z) + y, z)
+
+
 func build_env() -> void:
 	var env = Environment.new()
-	var sky_mat = ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color("6f9fb8")
-	sky_mat.sky_horizon_color = Color("e8d9b8")
-	sky_mat.ground_horizon_color = Color("e8d9b8")
-	sky_mat.ground_bottom_color = Color("8a9a80")
 	var sky = Sky.new()
-	sky.sky_material = sky_mat
+	sky.sky_material = Sh.mat(Sh.SKY, {"noise_tex": noise_tex})
+	sky.radiance_size = Sky.RADIANCE_SIZE_64
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("b8c8c0")
-	env.ambient_light_energy = 0.55
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.ambient_light_color = Color("a9b8c8")
+	env.ambient_light_energy = 0.6
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_white = 6.0
 	env.glow_enabled = true
-	env.glow_intensity = 0.6
-	env.glow_bloom = 0.1
+	env.glow_intensity = 0.7
+	env.glow_bloom = 0.08
 	env.fog_enabled = true
-	env.fog_light_color = Color("cfd8c4")
-	env.fog_density = 0.007
-	env.fog_sky_affect = 0.3
+	env.fog_light_color = Color("d6c4a8")
+	env.fog_density = 0.0055
+	env.fog_sky_affect = 0.15
+	env.fog_aerial_perspective = 0.4
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 1.18
+	env.adjustment_contrast = 1.06
 	var we = WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	var sun = DirectionalLight3D.new()
-	sun.light_color = Color("ffe6bd")
-	sun.light_energy = 1.25
+	sun.light_color = Color("ffdfb0")
+	sun.light_energy = 1.5
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 70.0
-	sun.rotation_degrees = Vector3(-48, 35, 0)
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_max_distance = 80.0
+	sun.shadow_blur = 1.5
+	sun.rotation_degrees = Vector3(-38, 40, 0)
 	add_child(sun)
 
 
-func ground_color(x: float, z: float) -> Color:
-	var d = Vector2(x, z).length()
-	var n = sin(x * 0.11) * cos(z * 0.13) * 0.5 + sin((x + z) * 0.05) * 0.5
-	if d < 22.0:
-		return Color(0.6, 0.52, 0.38)
-	if d < 170.0:
-		return Color.from_hsv(0.27 + n * 0.03, 0.52, 0.46 + n * 0.06)
-	return Color.from_hsv(max(0.06, 0.14 - (d - 170.0) / 1200.0), 0.42, 0.44 + n * 0.05)
-
-
-func build_ground() -> void:
-	var st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var n = 64
-	var step = 640.0 / n
-	for i in range(n):
-		for j in range(n):
-			var x0 = -320.0 + i * step
-			var z0 = -320.0 + j * step
-			var pts = [Vector3(x0, 0, z0), Vector3(x0 + step, 0, z0), Vector3(x0 + step, 0, z0 + step),
-				Vector3(x0, 0, z0), Vector3(x0 + step, 0, z0 + step), Vector3(x0, 0, z0 + step)]
-			for p in pts:
-				st.set_color(ground_color(p.x, p.z))
-				st.set_normal(Vector3.UP)
-				st.add_vertex(p)
+func build_terrain() -> void:
+	var n1 = GRID + 1
+	var verts = PackedVector3Array()
+	var norms = PackedVector3Array()
+	var idx = PackedInt32Array()
+	verts.resize(n1 * n1)
+	norms.resize(n1 * n1)
+	for j in range(n1):
+		for i in range(n1):
+			var k = j * n1 + i
+			verts[k] = Vector3(-320.0 + i * CELL, hdata[k], -320.0 + j * CELL)
+			var hl = hdata[j * n1 + max(i - 1, 0)]
+			var hr = hdata[j * n1 + min(i + 1, GRID)]
+			var hu = hdata[max(j - 1, 0) * n1 + i]
+			var hd = hdata[min(j + 1, GRID) * n1 + i]
+			norms[k] = Vector3(hl - hr, 2.0 * CELL, hu - hd).normalized()
+	for j in range(GRID):
+		for i in range(GRID):
+			var a = j * n1 + i
+			var b = a + 1
+			var c = a + n1
+			var d = c + 1
+			idx.append(a)
+			idx.append(b)
+			idx.append(c)
+			idx.append(b)
+			idx.append(d)
+			idx.append(c)
+	var arrays = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = norms
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var am = ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var mi = MeshInstance3D.new()
-	mi.mesh = st.commit()
-	var m = StandardMaterial3D.new()
-	m.vertex_color_use_as_albedo = true
-	m.vertex_color_is_srgb = true
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	m.roughness = 1.0
-	mi.material_override = m
+	mi.mesh = am
+	mi.material_override = Sh.mat(Sh.TERRAIN, {"noise_tex": noise_tex})
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+func build_water() -> void:
+	var pmesh = PlaneMesh.new()
+	pmesh.size = Vector2(3000, 3000)
+	var mi = MeshInstance3D.new()
+	mi.mesh = pmesh
+	mi.material_override = Sh.mat(Sh.WATER, {"noise_tex": noise_tex})
+	mi.position = Vector3(0, -2.0, 0)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+func build_grass() -> void:
+	var verts = PackedVector3Array([Vector3(-0.07, 0, 0), Vector3(0.07, 0, 0), Vector3(-0.045, 0.45, 0), Vector3(0.045, 0.45, 0), Vector3(0, 0.9, 0)])
+	var uvs = PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(0, 0.5), Vector2(1, 0.5), Vector2(0.5, 1)])
+	var idx = PackedInt32Array([0, 1, 2, 1, 3, 2, 2, 3, 4])
+	var arrays = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var am = ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	grass_mat = Sh.mat(Sh.GRASS, {"noise_tex": noise_tex, "hmap": hmap_tex, "player_pos": Vector3.ZERO})
+	am.surface_set_material(0, grass_mat)
+	var count = 16000
+	var mm = MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = am
+	mm.instance_count = count
+	for i in range(count):
+		var b = Basis(Vector3.UP, randf() * TAU).scaled(Vector3(randf_range(0.8, 1.5), randf_range(0.5, 1.25), 1.0))
+		mm.set_instance_transform(i, Transform3D(b, Vector3(randf_range(-35.0, 35.0), 0, randf_range(-35.0, 35.0))))
+	var mmi = MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.custom_aabb = AABB(Vector3(-400, -30, -400), Vector3(800, 90, 800))
+	add_child(mmi)
 
 
 func multimesh(mesh: Mesh, count: int, colors: bool) -> MultiMesh:
@@ -249,64 +365,94 @@ func multimesh(mesh: Mesh, count: int, colors: bool) -> MultiMesh:
 
 
 func build_props() -> void:
-	var n = 240
+	var n = 230
 	var trunk_mesh = CylinderMesh.new()
-	trunk_mesh.top_radius = 0.22
-	trunk_mesh.bottom_radius = 0.34
-	trunk_mesh.height = 2.4
-	trunk_mesh.radial_segments = 6
-	trunk_mesh.material = Build.mat(Color("4b3626"))
+	trunk_mesh.top_radius = 0.18
+	trunk_mesh.bottom_radius = 0.38
+	trunk_mesh.height = 3.2
+	trunk_mesh.radial_segments = 8
+	trunk_mesh.material = Build.mat(Color("3a281c"))
 	var top_mesh = SphereMesh.new()
-	top_mesh.radius = 1.7
-	top_mesh.height = 3.4
-	top_mesh.radial_segments = 7
-	top_mesh.rings = 4
-	var top_mat = StandardMaterial3D.new()
-	top_mat.vertex_color_use_as_albedo = true
-	top_mat.vertex_color_is_srgb = true
-	top_mat.roughness = 1.0
-	top_mesh.material = top_mat
+	top_mesh.radius = 1.5
+	top_mesh.height = 3.0
+	top_mesh.radial_segments = 14
+	top_mesh.rings = 8
+	top_mesh.material = Sh.mat(Sh.BLOB, {"noise_tex": noise_tex, "sway": 0.12, "bump": 0.9})
 	var trunks = multimesh(trunk_mesh, n, false)
-	var tops = multimesh(top_mesh, n, true)
+	var tops = multimesh(top_mesh, n * 3, true)
 	for i in range(n):
 		var x = 0.0
 		var z = 0.0
-		var r = 0.0
-		while r < 34.0 or r > 300.0:
-			x = randf_range(-300, 300)
-			z = randf_range(-300, 300)
-			r = Vector2(x, z).length()
+		var ok = false
+		while not ok:
+			x = randf_range(-290, 290)
+			z = randf_range(-290, 290)
+			var r = Vector2(x, z).length()
+			ok = r > 34.0 and r < 288.0 and ground_h(x, z) > -1.4 and (abs(x) > 7.0 or z > -20.0) and Vector2(x, z + 215.0).length() > 24.0
 		var s = randf_range(0.8, 1.7)
-		var b = Basis(Vector3.UP, randf() * TAU).scaled(Vector3(s, s, s))
-		trunks.set_instance_transform(i, Transform3D(b, Vector3(x, 1.2 * s, z)))
-		tops.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(s, s * randf_range(0.8, 1.2), s)), Vector3(x, 3.1 * s, z)))
+		var gy = ground_h(x, z)
+		trunks.set_instance_transform(i, Transform3D(Basis(Vector3.UP, randf() * TAU).scaled(Vector3(s, s, s)), Vector3(x, gy + 1.5 * s, z)))
 		var k = randf()
-		var c = Color.from_hsv(randf_range(0.28, 0.36), 0.55, randf_range(0.36, 0.5))
-		if k < 0.28:
-			c = Color.from_hsv(randf_range(0.0, 0.05), 0.75, 0.68)
+		var c = Color.from_hsv(randf_range(0.26, 0.36), 0.75, randf_range(0.22, 0.36))
+		if k < 0.2:
+			c = Color.from_hsv(randf_range(0.0, 0.04), 0.85, 0.55)
+		elif k < 0.3:
+			c = Color.from_hsv(0.09, 0.9, 0.7)
 		elif k < 0.4:
-			c = Color.from_hsv(0.1, 0.8, 0.82)
-		tops.set_instance_color(i, c)
+			c = Color.from_hsv(0.93, 0.45, 0.85)
+		for j in range(3):
+			var off = Vector3(randf_range(-0.9, 0.9), randf_range(-0.4, 0.7), randf_range(-0.9, 0.9)) * s
+			if j == 0:
+				off = Vector3.ZERO
+			var bs = s * (1.0 if j == 0 else randf_range(0.55, 0.8))
+			tops.set_instance_transform(i * 3 + j, Transform3D(Basis(Vector3.UP, randf() * TAU).scaled(Vector3(bs, bs * 0.85, bs)), Vector3(x, gy + 3.6 * s, z) + off))
+			tops.set_instance_color(i * 3 + j, c * randf_range(0.85, 1.1))
 		colliders.append({"x": x, "z": z, "r": 0.5 * s, "stone": false})
-	var rn = 80
+	var rn = 90
 	var rock_mesh = SphereMesh.new()
 	rock_mesh.radius = 1.0
 	rock_mesh.height = 2.0
-	rock_mesh.radial_segments = 6
-	rock_mesh.rings = 3
-	rock_mesh.material = Build.mat(Color("7d7f78"))
-	var rocks = multimesh(rock_mesh, rn, false)
+	rock_mesh.radial_segments = 12
+	rock_mesh.rings = 7
+	rock_mesh.material = Sh.mat(Sh.BLOB, {"noise_tex": noise_tex, "sway": 0.0, "bump": 0.8})
+	var rocks = multimesh(rock_mesh, rn, true)
 	for i in range(rn):
 		var x = 0.0
 		var z = 0.0
-		while Vector2(x, z).length() < 30.0:
-			x = randf_range(-290, 290)
-			z = randf_range(-290, 290)
-		var s = randf_range(0.5, 2.2)
-		var b = Basis(Vector3(1, 0, 0), randf() * 3.0).rotated(Vector3.UP, randf() * 3.0).scaled(Vector3(s, s * 0.7, s))
-		rocks.set_instance_transform(i, Transform3D(b, Vector3(x, s * 0.3, z)))
+		while Vector2(x, z).length() < 32.0 or (abs(x) < 6.0 and z < -20.0):
+			x = randf_range(-285, 285)
+			z = randf_range(-285, 285)
+		var s = randf_range(0.6, 2.4)
+		var b = Basis(Vector3(1, 0, 0), randf() * 3.0).rotated(Vector3.UP, randf() * 3.0).scaled(Vector3(s, s * 0.75, s))
+		rocks.set_instance_transform(i, Transform3D(b, Vector3(x, ground_h(x, z) + s * 0.25, z)))
+		var g = randf_range(0.30, 0.42)
+		rocks.set_instance_color(i, Color(g, g * 0.98, g * 0.94))
 		if s > 1.1:
-			colliders.append({"x": x, "z": z, "r": s * 0.8, "stone": false})
+			colliders.append({"x": x, "z": z, "r": s * 0.85, "stone": false})
+
+
+func sparks(parent: Node3D, pos: Vector3, col: Color, amount: int, radius: float) -> void:
+	var cp = CPUParticles3D.new()
+	cp.amount = amount
+	cp.lifetime = 2.2
+	cp.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	cp.emission_sphere_radius = radius
+	cp.direction = Vector3.UP
+	cp.spread = 25.0
+	cp.gravity = Vector3(0, 1.4, 0)
+	cp.initial_velocity_min = 0.4
+	cp.initial_velocity_max = 1.6
+	cp.scale_amount_min = 0.5
+	cp.scale_amount_max = 1.3
+	var q = QuadMesh.new()
+	q.size = Vector2(0.14, 0.14)
+	var pmat = Build.flat(col, 1.0, true)
+	pmat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	q.material = pmat
+	cp.mesh = q
+	cp.position = pos
+	cp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(cp)
 
 
 func house(x: float, z: float, w: float, rot: float, tiers: int) -> void:
@@ -314,12 +460,20 @@ func house(x: float, z: float, w: float, rot: float, tiers: int) -> void:
 	var wood = Build.mat(Color("5a2f22"))
 	var roof = Build.mat(Color("2f4a44"))
 	var g = Node3D.new()
-	g.position = Vector3(x, 0, z)
+	g.position = at(x, 0.0, z)
 	g.rotation.y = rot
 	add_child(g)
 	Build.box(g, Vector3(w, 3, w * 0.8), wall, Vector3(0, 1.5, 0))
 	Build.box(g, Vector3(w + 0.2, 0.25, w * 0.8 + 0.2), wood, Vector3(0, 0.12, 0))
 	Build.box(g, Vector3(1.1, 2, 0.1), wood, Vector3(0, 1, w * 0.4 + 0.02))
+	Build.box(g, Vector3(w + 0.3, 0.6, w * 0.8 + 0.3), Build.mat(Color("6a6660")), Vector3(0, 0.3, 0))
+	var win = Build.glow(Color("ffc66a"), 1.8)
+	for sx in [-1.0, 1.0]:
+		Build.box(g, Vector3(0.9, 0.9, 0.06), win, Vector3(sx * w * 0.3, 1.9, w * 0.4 + 0.02))
+		Build.box(g, Vector3(1.0, 0.08, 0.1), wood, Vector3(sx * w * 0.3, 1.9, w * 0.4 + 0.04))
+		Build.box(g, Vector3(0.08, 1.0, 0.1), wood, Vector3(sx * w * 0.3, 1.9, w * 0.4 + 0.04))
+		Build.box(g, Vector3(0.2, 3.0, 0.2), wood, Vector3(sx * w * 0.5, 1.5, w * 0.4))
+		Build.box(g, Vector3(0.2, 3.0, 0.2), wood, Vector3(sx * w * 0.5, 1.5, -w * 0.4))
 	var y = 3.0
 	for t in range(tiers):
 		var rw = (w * 1.05) * (1.0 - t * 0.3)
@@ -353,6 +507,7 @@ func build_village() -> void:
 	Build.box(self, Vector3(1.8, 0.25, 0.9), Build.mat(Color("222222")), Vector3(SMITH.x + 1.6, 0.82, SMITH.y))
 	Build.box(self, Vector3(1.2, 0.8, 1.2), Build.mat(Color("6a5a4c")), Vector3(SMITH.x - 1.5, 0.4, SMITH.y - 1))
 	Build.cyl(self, 0.0, 0.35, 0.9, Build.glow(Color("ff8a2a"), 3.0), Vector3(SMITH.x - 1.5, 1.2, SMITH.y - 1), 6)
+	sparks(self, Vector3(SMITH.x - 1.5, 1.4, SMITH.y - 1), Color("ffb060"), 16, 0.3)
 	var npc = Build.humanoid({"cloth": Color("4a3a30"), "trim": Color("d8b25a"), "weapon": "sword"})
 	npc["root"].position = Vector3(SMITH.x, 0, SMITH.y)
 	npc["root"].rotation.y = -0.6
@@ -374,7 +529,7 @@ func build_player() -> void:
 		pg.remove_child(c)
 		c.queue_free()
 	var C = CLASES[S["clase"]]
-	pm = Build.humanoid({"cloth": REINOS[S["reino"]]["c"], "trim": Color("d8b25a"), "hat": S["clase"] != "guerrero", "weapon": C["w"]})
+	pm = Build.humanoid({"cloth": REINOS[S["reino"]]["c"], "trim": Color("d8b25a"), "hat": S["clase"] != "guerrero", "weapon": C["w"], "cape": REINOS[S["reino"]]["c"].darkened(0.15)})
 	pg.add_child(pm["root"])
 	ph = Build.horse()
 	ph["root"].visible = false
@@ -463,7 +618,7 @@ func spawn_enemy(x: float, z: float, type: String = "", lvl: int = 0, wave: bool
 	var sc = float(D["s"])
 	var model
 	if D["quad"]:
-		model = Build.quad(D["col"], sc)
+		model = Build.quad(D["col"], sc, type)
 	else:
 		var trim = Color("7a2a22")
 		var skin = Color("d9b08c")
@@ -473,7 +628,10 @@ func spawn_enemy(x: float, z: float, type: String = "", lvl: int = 0, wave: bool
 		elif D["ghost"]:
 			trim = Color("dff5ee")
 			skin = Color("cfeee6")
-		model = Build.humanoid({"cloth": D["col"], "trim": trim, "skin": skin, "ghost": D["ghost"], "weapon": "sword", "hat": type == "bandido"})
+		var opts = {"cloth": D["col"], "trim": trim, "skin": skin, "ghost": D["ghost"], "weapon": "sword", "hat": type == "bandido"}
+		if D["boss"]:
+			opts["cape"] = Color("5a1410")
+		model = Build.humanoid(opts)
 		model["root"].scale = Vector3.ONE * sc
 		if D["boss"]:
 			var eye = Build.glow(Color("ff5a2a"), 4.0)
@@ -484,7 +642,7 @@ func spawn_enemy(x: float, z: float, type: String = "", lvl: int = 0, wave: bool
 				h.rotation.z = -k * 0.4
 	var g = Node3D.new()
 	g.add_child(model["root"])
-	g.position = Vector3(x, 0, z)
+	g.position = at(x, 0.0, z)
 	var bar_y = (1.6 if D["quad"] else 2.7) * sc + 0.2
 	var bar_w = 4.0 if D["boss"] else 1.3
 	var bar = make_bar(g, bar_y, bar_w, false)
@@ -511,7 +669,7 @@ func spawn_stone() -> void:
 		d = randf_range(45.0, 255.0)
 		x = cos(a) * d
 		z = sin(a) * d
-		var ok = Vector2(x - px, z - pz).length() > 30.0
+		var ok = Vector2(x - px, z - pz).length() > 30.0 and ground_h(x, z) > -1.0
 		for s in stones:
 			if Vector2(s["x"] - x, s["z"] - z).length() < 50.0:
 				ok = false
@@ -519,20 +677,17 @@ func spawn_stone() -> void:
 			break
 	var lvl = clampi(int(round(d / 18.0)), 2, 22)
 	var g = Node3D.new()
-	g.position = Vector3(x, 0, z)
+	g.position = at(x, 0.0, z)
 	add_child(g)
-	var rock = StandardMaterial3D.new()
-	rock.albedo_color = Color("26262b")
-	rock.roughness = 0.6
-	rock.emission_enabled = true
-	rock.emission = Color("1cd0a8")
-	rock.emission_energy_multiplier = 0.5
-	var core = Build.sphere(g, 1.5, rock, Vector3(0, 1.6, 0), 5)
+	var rock = Sh.mat(Sh.STONE, {"noise_tex": noise_tex, "hit": 0.0})
+	var core = Build.sphere(g, 1.5, rock, Vector3(0, 1.7, 0), 24)
 	core.scale.y = 1.4
-	for i in range(5):
-		var a2 = i / 5.0 * TAU
-		var sh = Build.sphere(g, 0.45, rock, Vector3(cos(a2) * 1.9, 0.4, sin(a2) * 1.9), 4)
-		sh.rotation = Vector3(randf() * 3.0, randf() * 3.0, 0)
+	var crystal = Build.glow(Color("1cd0a8"), 2.2)
+	for i in range(6):
+		var a2 = i / 6.0 * TAU
+		var sh = Build.cyl(g, 0.0, 0.28, randf_range(0.8, 1.6), crystal, Vector3(cos(a2) * 2.1, 0.4, sin(a2) * 2.1), 5)
+		sh.rotation = Vector3(randf_range(-0.5, 0.5), randf() * 3.0, randf_range(-0.5, 0.5))
+	sparks(g, Vector3(0, 1.5, 0), Color("7ff0d0"), 30, 2.6)
 	var beam_mat = Build.flat(Color("63e0c0"), 0.2, true)
 	beam_mat.set("disable_fog", true)
 	var beam = Build.cyl(g, 0.5, 1.3, 60.0, beam_mat, Vector3(0, 30, 0), 10)
@@ -567,7 +722,7 @@ func burst(pos: Vector3, col: Color, n: int) -> void:
 		p_idx = (p_idx + 1) % parts.size()
 		var p = parts[p_idx]
 		p["n"].material_override.albedo_color = col
-		p["n"].position = pos
+		p["n"].position = pos + Vector3(0, ground_h(pos.x, pos.z), 0)
 		p["n"].visible = true
 		p["life"] = randf_range(0.35, 0.7)
 		var a = randf() * TAU
@@ -591,7 +746,7 @@ func ring_fx(x: float, z: float, r: float, col: Color, life: float) -> void:
 	var mi = MeshInstance3D.new()
 	mi.mesh = t
 	mi.material_override = m
-	mi.position = Vector3(x, 0.15, z)
+	mi.position = at(x, 0.15, z)
 	mi.scale = Vector3(1, 0.3, 1)
 	add_child(mi)
 	add_fx(mi, m, life, r)
@@ -616,8 +771,8 @@ func slash_fx(arc: float, rng: float) -> void:
 
 func line_fx(pts: Array, col: Color) -> void:
 	for i in range(pts.size() - 1):
-		var a = pts[i]
-		var b = pts[i + 1]
+		var a = pts[i] + Vector3(0, ground_h(pts[i].x, pts[i].z), 0)
+		var b = pts[i + 1] + Vector3(0, ground_h(pts[i + 1].x, pts[i + 1].z), 0)
 		var d = b - a
 		var l = d.length()
 		if l < 0.01:
@@ -644,7 +799,7 @@ func dmg_num(pos: Vector3, txt: String, kind: String = "") -> void:
 		c = Color("63e0c0")
 	l.modulate = c
 	l.outline_modulate = Color(0, 0, 0, 1)
-	l.position = pos + Vector3(randf_range(-0.4, 0.4), 0, 0)
+	l.position = pos + Vector3(randf_range(-0.4, 0.4), ground_h(pos.x, pos.z), 0)
 	l.visible = true
 	e["life"] = 0.8
 
@@ -656,12 +811,12 @@ func drop(x: float, z: float, type: String, val: int) -> void:
 	z += sin(a) * r
 	var n: MeshInstance3D
 	if type == "gold":
-		n = Build.cyl(self, 0.22, 0.22, 0.06, Build.glow(Color("f0c040"), 0.8), Vector3(x, 0.5, z), 10)
+		n = Build.cyl(self, 0.22, 0.22, 0.06, Build.glow(Color("f0c040"), 0.8), at(x, 0.5, z), 10)
 		n.rotation.x = PI / 2.0
 	elif type == "pot":
-		n = Build.sphere(self, 0.24, Build.glow(Color("cf4a40"), 0.6), Vector3(x, 0.5, z), 8)
+		n = Build.sphere(self, 0.24, Build.glow(Color("cf4a40"), 0.6), at(x, 0.5, z), 8)
 	else:
-		n = Build.sphere(self, 0.3, Build.glow(Color("63e0c0"), 2.5), Vector3(x, 0.5, z), 4)
+		n = Build.sphere(self, 0.3, Build.glow(Color("63e0c0"), 2.5), at(x, 0.5, z), 4)
 	items.append({"n": n, "x": x, "z": z, "type": type, "val": val, "t": 0.0})
 
 
@@ -854,7 +1009,7 @@ func attack() -> void:
 
 
 func shoot(t, mult: float, col: Color) -> void:
-	var n = Build.sphere(self, 0.28, Build.glow(col, 4.0), Vector3(px, 1.5, pz), 8)
+	var n = Build.sphere(self, 0.28, Build.glow(col, 4.0), at(px, 1.5, pz), 8)
 	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	projs.append({"n": n, "x": px, "z": pz, "dx": sin(pang), "dz": cos(pang), "t": t, "mult": mult, "life": 1.3, "col": col})
 
@@ -1047,6 +1202,7 @@ func _process(delta: float) -> void:
 			save_t = 0.0
 			save_game()
 	upd_cam(dt)
+	grass_mat.set_shader_parameter("player_pos", Vector3(cam_t.x, 0, cam_t.z))
 
 
 func upd_player(dt: float) -> void:
@@ -1063,7 +1219,7 @@ func upd_player(dt: float) -> void:
 				if not e["boss"] and e["st"] == "chase":
 					e["st"] = "back"
 			save_game()
-		pg.position = Vector3(px, 0, pz)
+		pg.position = at(px, 0.0, pz)
 		return
 	var m = Vector2(jx, jy).length()
 	moving = m > 0.15
@@ -1101,7 +1257,7 @@ func upd_player(dt: float) -> void:
 		elif combat_t <= 0.0:
 			rate = 0.012
 		php = min(pmaxhp, php + pmaxhp * rate * dt)
-	pg.position = Vector3(px, 0, pz)
+	pg.position = at(px, 0.0, pz)
 	pg.rotation.y = pang
 	Build.anim_h(pm, time, moving and not mounted, swing)
 	if mounted:
@@ -1187,7 +1343,7 @@ func upd_enemies(dt: float) -> void:
 					if e["slam_t"] <= 0.0 and d < 13.0 and telegraph == null:
 						e["slam_t"] = randf_range(6.0, 8.0)
 						var tm = Build.flat(Color("cf4a40"), 0.35)
-						var tn = Build.cyl(self, 1.0, 1.0, 0.06, tm, Vector3(e["x"], 0.1, e["z"]), 32)
+						var tn = Build.cyl(self, 1.0, 1.0, 0.06, tm, at(e["x"], 0.12, e["z"]), 32)
 						tn.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 						telegraph = {"n": tn, "t": 1.3, "x": e["x"], "z": e["z"], "r": 8.0, "dmg": e["dmg"] * 2.5}
 		if go:
@@ -1219,7 +1375,7 @@ func upd_enemies(dt: float) -> void:
 		var gy = 0.0
 		if D["ghost"]:
 			gy = 0.25 + sin(e["t"] * 3.0) * 0.12
-		e["g"].position = Vector3(e["x"], gy, e["z"])
+		e["g"].position = at(e["x"], gy, e["z"])
 		e["g"].rotation.y = e["ang"]
 		e["model"]["root"].scale = Vector3.ONE * (float(D["s"]) * (1.15 if e["hit_t"] > 0.0 else 1.0))
 		if D["quad"]:
@@ -1275,7 +1431,7 @@ func upd_world(dt: float) -> void:
 		s["hit_t"] = max(0.0, s["hit_t"] - dt)
 		s["core"].rotation.y += dt * 0.3
 		s["core"].scale = Vector3(1.0 + s["hit_t"], 1.4 + s["hit_t"], 1.0 + s["hit_t"])
-		s["rock"].emission_energy_multiplier = 0.6 + sin(time * 3.0) * 0.25 + s["hit_t"] * 8.0
+		s["rock"].set_shader_parameter("hit", s["hit_t"])
 	for i in range(projs.size() - 1, -1, -1):
 		var p = projs[i]
 		p["life"] -= dt
@@ -1288,7 +1444,7 @@ func upd_world(dt: float) -> void:
 				p["dz"] = v.y
 		p["x"] += p["dx"] * 30.0 * dt
 		p["z"] += p["dz"] * 30.0 * dt
-		p["n"].position = Vector3(p["x"], 1.5, p["z"])
+		p["n"].position = at(p["x"], 1.5, p["z"])
 		var h = null
 		var all = targets()
 		for e in all:
@@ -1314,7 +1470,7 @@ func upd_world(dt: float) -> void:
 		if d < 6.0 and d > 0.01 and it["t"] > 0.4 and alive:
 			it["x"] += dx / d * 14.0 * dt
 			it["z"] += dz / d * 14.0 * dt
-		it["n"].position = Vector3(it["x"], 0.5 + sin(it["t"] * 4.0) * 0.12, it["z"])
+		it["n"].position = at(it["x"], 0.5 + sin(it["t"] * 4.0) * 0.12, it["z"])
 		it["n"].rotation.y += dt * 3.0
 		if d < 1.4 and it["t"] > 0.4 and alive:
 			if it["type"] == "gold":
@@ -1350,7 +1506,7 @@ func upd_world(dt: float) -> void:
 		p["v"].y -= 20.0 * dt
 		p["n"].position += p["v"] * dt
 		p["n"].rotation.x += dt * 8.0
-		if p["life"] <= 0.0 or p["n"].position.y < 0.0:
+		if p["life"] <= 0.0 or p["n"].position.y < ground_h(p["n"].position.x, p["n"].position.z):
 			p["life"] = 0.0
 			p["n"].visible = false
 	for e in nums:
@@ -1377,9 +1533,10 @@ func upd_cam(dt: float) -> void:
 	var k = min(1.0, dt * 10.0)
 	cam_t.x += (px - cam_t.x) * k
 	cam_t.z += (pz - cam_t.z) * k
-	cam_t.y = 2.4 if mounted else 1.6
+	cam_t.y += (ground_h(px, pz) + (2.4 if mounted else 1.6) - cam_t.y) * k
 	var cp = cos(cam_pitch)
 	cam.position = cam_t + Vector3(sin(cam_yaw) * cp * cam_dist, sin(cam_pitch) * cam_dist, cos(cam_yaw) * cp * cam_dist)
+	cam.position.y = max(cam.position.y, ground_h(cam.position.x, cam.position.z) + 1.2)
 	cam.look_at(cam_t, Vector3.UP)
 
 
@@ -1388,6 +1545,10 @@ func upd_cam(dt: float) -> void:
 func run_test() -> void:
 	test_f += 1
 	var f = test_f
+	if f == 1:
+		shot_dir = OS.get_environment("CR_SHOTS")
+	if shot_dir != "" and f in [1, 30, 120, 175, 260, 300, 350, 420]:
+		shot("f" + str(f))
 	if f == 2:
 		var cl = OS.get_environment("CR_TEST")
 		if not CLASES.has(cl):
@@ -1454,3 +1615,10 @@ func run_test() -> void:
 		var back = load_save()
 		print("CR_TEST_OK clase=", S["clase"], " nivel=", S["lvl"], " piedras=", S["dest"], " jefes=", S["boss"], " guardado=", back != null)
 		get_tree().quit()
+
+
+func shot(shot_name: String) -> void:
+	await RenderingServer.frame_post_draw
+	var img = get_viewport().get_texture().get_image()
+	if img != null:
+		img.save_png(shot_dir + "/" + shot_name + ".png")

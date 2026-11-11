@@ -34,12 +34,17 @@ var lbl_msg: Label
 var btn_w: Button
 var btn_a: Button
 var btn_p: Button
+var icons = {}
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	font = ThemeDB.fallback_font
+	for k in ["atk", "s1", "s2", "pot", "mnt"]:
+		var path = "res://ui/" + k + ".svg"
+		if ResourceLoader.exists(path):
+			icons[k] = load(path)
 	build_start()
 	build_smith()
 
@@ -382,8 +387,12 @@ func ctxt(cx: float, y: float, s: String, sz: int, col: Color) -> void:
 	txt(Vector2(cx - 450.0, y), s, sz, col, HORIZONTAL_ALIGNMENT_CENTER, 900.0)
 
 
-func round_btn(c: Vector2, r: float, label: String, border: Color, bg: Color, frac: float, sz: int) -> void:
+func round_btn(key: String, c: Vector2, r: float, label: String, border: Color, bg: Color, frac: float, sz: int) -> void:
 	draw_circle(c, r, bg)
+	var has_icon = icons.has(key) and icons[key] != null
+	if has_icon:
+		var isz = r * 1.05
+		draw_texture_rect(icons[key], Rect2(c.x - isz / 2.0, c.y - isz * 0.68, isz, isz), false, PAPER)
 	if frac > 0.97:
 		draw_circle(c, r, Color(0, 0, 0, 0.6))
 	elif frac > 0.03:
@@ -395,7 +404,10 @@ func round_btn(c: Vector2, r: float, label: String, border: Color, bg: Color, fr
 			pts.append(c + Vector2(cos(a), sin(a)) * r)
 		draw_colored_polygon(pts, Color(0, 0, 0, 0.6))
 	draw_arc(c, r, 0.0, TAU, 48, border, 3.0, true)
-	txt(Vector2(c.x - r, c.y + sz * 0.35), label, sz, PAPER, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0)
+	if has_icon:
+		txt(Vector2(c.x - r, c.y + r * 0.62), label, int(sz * 0.72), PAPER, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0)
+	else:
+		txt(Vector2(c.x - r, c.y + sz * 0.35), label, sz, PAPER, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0)
 
 
 func _draw() -> void:
@@ -452,11 +464,11 @@ func _draw() -> void:
 	draw_arc(knob, 34.0, 0.0, TAU, 32, GOLD, 3.0, true)
 	# botones
 	var b = btns()
-	round_btn(b["mnt"][0], b["mnt"][1], "Montura", GOLD, Color(0.85, 0.7, 0.35, 0.45) if game.mounted else LACQ, 0.0, 16)
-	round_btn(b["pot"][0], b["pot"][1], "Poción ×" + str(s["pots"]), GOLD, LACQ, game.pot_t / 4.0, 16)
-	round_btn(b["s2"][0], b["s2"][1], C["s2"]["n"], JADE, LACQ, game.cd2 / C["s2"]["cd"], 20)
-	round_btn(b["s1"][0], b["s1"][1], C["s1"]["n"], JADE, LACQ, game.cd1 / C["s1"]["cd"], 20)
-	round_btn(b["atk"][0], b["atk"][1], "Atacar", BLOOD, Color(0.47, 0.12, 0.1, 0.8), 0.0, 26)
+	round_btn("mnt", b["mnt"][0], b["mnt"][1], "Montura", GOLD, Color(0.85, 0.7, 0.35, 0.45) if game.mounted else LACQ, 0.0, 16)
+	round_btn("pot", b["pot"][0], b["pot"][1], "Poción ×" + str(s["pots"]), GOLD, LACQ, game.pot_t / 4.0, 16)
+	round_btn("s2", b["s2"][0], b["s2"][1], C["s2"]["n"], JADE, LACQ, game.cd2 / C["s2"]["cd"], 20)
+	round_btn("s1", b["s1"][0], b["s1"][1], C["s1"]["n"], JADE, LACQ, game.cd1 / C["s1"]["cd"], 20)
+	round_btn("atk", b["atk"][0], b["atk"][1], "Atacar", BLOOD, Color(0.47, 0.12, 0.1, 0.8), 0.0, 26)
 	if game.near_smith():
 		var sr = smith_rect()
 		draw_rect(sr, GOLD)
