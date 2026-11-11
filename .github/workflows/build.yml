@@ -90,6 +90,11 @@ jobs:
           ls -la shots
           if grep -qE "SHADER ERROR|SCRIPT ERROR|Shader compilation failed" render.log; then echo "::error::Errores de shader"; grep -B2 -A14 -E "SHADER ERROR|Shader compilation failed" render.log | head -150; exit 1; fi
           grep -q "CR_TEST_OK" render.log
+          for c in guerrero:carmesi asesino:dorado mago:azur chaman:carmesi; do
+            CR_TEST=${c%%:*} CR_MENU=${c##*:} CR_SHOTS=$PWD/shots LIBGL_ALWAYS_SOFTWARE=1 timeout 200 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot-bin/godot --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 1280x720 --fixed-fps 30 > menu.log 2>&1 || true
+            grep -E "SCRIPT ERROR|SHADER ERROR|CR_TEST_OK" menu.log || true
+            if grep -qE "SHADER ERROR|SCRIPT ERROR" menu.log; then cat menu.log | tail -40; exit 1; fi
+          done
 
       - name: Publicar capturas en una rama
         if: always()

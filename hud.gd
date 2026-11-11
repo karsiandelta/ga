@@ -36,6 +36,9 @@ var btn_a: Button
 var btn_p: Button
 var icons = {}
 var title_font: Font
+var sheet_title: Label
+var sheet_body: Label
+var sheet_skills: Label
 
 
 func _ready() -> void:
@@ -127,41 +130,96 @@ func row() -> HBoxContainer:
 
 
 func build_start() -> void:
-	var r = full_panel(0.55)
-	start_panel = r[0]
-	var vb = r[1]
-	var title = mk_label("CIELO ROTO", 104, GOLD)
+	start_panel = Control.new()
+	start_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(start_panel)
+	var dim = ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.045, 0.84)
+	dim.anchor_right = 0.56
+	dim.anchor_bottom = 1.0
+	start_panel.add_child(dim)
+	var edge = ColorRect.new()
+	edge.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.6)
+	edge.anchor_left = 0.56
+	edge.anchor_right = 0.56
+	edge.anchor_bottom = 1.0
+	edge.offset_right = 3.0
+	start_panel.add_child(edge)
+	var mc = MarginContainer.new()
+	mc.anchor_right = 0.56
+	mc.anchor_bottom = 1.0
+	mc.add_theme_constant_override("margin_left", 44)
+	mc.add_theme_constant_override("margin_right", 40)
+	mc.add_theme_constant_override("margin_top", 14)
+	mc.add_theme_constant_override("margin_bottom", 14)
+	start_panel.add_child(mc)
+	var vb = VBoxContainer.new()
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", 8)
+	mc.add_child(vb)
+	var title = mk_label("CIELO ROTO", 74, GOLD)
 	title.add_theme_font_override("font", title_font)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	vb.add_child(title)
-	vb.add_child(mk_label("El cielo se ha roto. Piedras malditas caen sobre los reinos y despiertan a los muertos.\nElige reino, empuña tu arma y destrúyelas.", 24, PAPER))
-	vb.add_child(mk_label("REINO", 18, DIM))
-	var hr = row()
+	var lede = mk_label("El cielo se ha roto. Piedras malditas caen sobre los reinos y despiertan a los muertos.", 20, PAPER)
+	lede.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	lede.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vb.add_child(lede)
+	var l1 = mk_label("REINO", 15, DIM)
+	l1.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	vb.add_child(l1)
+	var hr = HBoxContainer.new()
+	hr.add_theme_constant_override("separation", 10)
 	vb.add_child(hr)
 	for k in game.REINOS.keys():
-		var b = mk_button(game.REINOS[k]["n"], 26, Vector2(200, 60), false)
+		var b = mk_button(game.REINOS[k]["n"], 24, Vector2(196, 52), false)
 		b.toggle_mode = true
-		b.add_theme_color_override("font_color", game.REINOS[k]["c"].lightened(0.35))
+		b.add_theme_color_override("font_color", game.REINOS[k]["c"].lightened(0.45))
 		b.pressed.connect(_pick_reino.bind(k))
 		hr.add_child(b)
 		reino_btns[k] = b
-	vb.add_child(mk_label("CLASE", 18, DIM))
-	var hc = row()
-	vb.add_child(hc)
+	var l2 = mk_label("CLASE", 15, DIM)
+	l2.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	vb.add_child(l2)
+	var grid = GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 8)
+	vb.add_child(grid)
 	for k in game.CLASES.keys():
-		var b = mk_button(game.CLASES[k]["n"] + "\n" + game.CLASES[k]["d"], 20, Vector2(270, 84), false)
+		var b = mk_button(game.CLASES[k]["n"] + "\n" + game.CLASES[k]["d"], 18, Vector2(306, 64), false)
 		b.toggle_mode = true
 		b.pressed.connect(_pick_clase.bind(k))
-		hc.add_child(b)
+		grid.add_child(b)
 		clase_btns[k] = b
-	var ha = row()
+	# ficha de la clase elegida
+	var sheet = PanelContainer.new()
+	sheet.add_theme_stylebox_override("panel", sbox(Color(0.06, 0.055, 0.07, 0.9), Color(GOLD.r, GOLD.g, GOLD.b, 0.5), 1))
+	vb.add_child(sheet)
+	var sv = VBoxContainer.new()
+	sv.add_theme_constant_override("separation", 2)
+	sheet.add_child(sv)
+	sheet_title = mk_label("", 30, GOLD)
+	sheet_title.add_theme_font_override("font", title_font)
+	sheet_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	sv.add_child(sheet_title)
+	sheet_body = mk_label("", 18, PAPER)
+	sheet_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	sheet_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sv.add_child(sheet_body)
+	sheet_skills = mk_label("", 18, JADE)
+	sheet_skills.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	sv.add_child(sheet_skills)
+	var ha = HBoxContainer.new()
+	ha.add_theme_constant_override("separation", 10)
 	vb.add_child(ha)
 	saved = game.load_save()
-	var b_new = mk_button("Entrar al reino", 30, Vector2(340, 72), true)
+	var b_new = mk_button("Entrar al reino", 26, Vector2(272, 60), true)
 	b_new.pressed.connect(_on_new)
 	ha.add_child(b_new)
 	if saved != null:
 		b_new.text = "Empezar de nuevo"
-		var b_c = mk_button("Continuar: " + game.CLASES[saved["clase"]]["n"] + " nivel " + str(saved["lvl"]), 26, Vector2(380, 72), false)
+		var b_c = mk_button("Continuar: " + game.CLASES[saved["clase"]]["n"] + " nv " + str(saved["lvl"]), 22, Vector2(330, 60), false)
 		b_c.pressed.connect(_on_continue)
 		ha.add_child(b_c)
 	_sync_picks()
@@ -172,6 +230,11 @@ func _sync_picks() -> void:
 		reino_btns[k].set_pressed_no_signal(k == sel_reino)
 	for k in clase_btns.keys():
 		clase_btns[k].set_pressed_no_signal(k == sel_clase)
+	var C = game.CLASES[sel_clase]
+	sheet_title.text = C["n"].to_upper()
+	sheet_body.text = C["p"]
+	sheet_skills.text = "Arma: " + C["arma"] + "    Habilidades: " + C["s1"]["n"] + " y " + C["s2"]["n"]
+	game.set_preview(sel_reino, sel_clase)
 
 
 func _pick_reino(k: String) -> void:

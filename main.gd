@@ -16,16 +16,16 @@ var REINOS = {
 	"azur": {"n": "Azur", "c": Color("1f4f8f")},
 }
 var CLASES = {
-	"guerrero": {"n": "Guerrero", "d": "Espada pesada, mucha vida.", "hp": 320, "atk": 22, "def": 8, "range": 3.3, "arc": 2.3, "spd": 8.5, "cd": 0.42, "w": "sword", "ranged": false,
+	"guerrero": {"n": "Guerrero", "d": "Espada pesada, mucha vida.", "p": "Caballero juramentado de armadura pesada. Aguanta en primera línea y parte en dos a quien se acerque.", "arma": "Mandoble", "hp": 320, "atk": 22, "def": 8, "range": 3.3, "arc": 2.3, "spd": 8.5, "cd": 0.42, "w": "sword", "ranged": false,
 		"s1": {"n": "Torbellino", "t": "aoe", "r": 5.5, "m": 2.2, "cd": 6.0, "far": false},
 		"s2": {"n": "Furia", "t": "buff", "k": "furia", "dur": 8.0, "cd": 20.0}},
-	"asesino": {"n": "Asesino", "d": "Dagas rápidas y embestida.", "hp": 240, "atk": 25, "def": 5, "range": 2.8, "arc": 2.0, "spd": 10.0, "cd": 0.28, "w": "dagger", "ranged": false,
+	"asesino": {"n": "Asesino", "d": "Dagas rápidas y embestida.", "p": "Sombra del reino. Golpea más rápido que nadie, atraviesa a sus enemigos y desaparece.", "arma": "Dagas gemelas", "hp": 240, "atk": 25, "def": 5, "range": 2.8, "arc": 2.0, "spd": 10.0, "cd": 0.28, "w": "dagger", "ranged": false,
 		"s1": {"n": "Tajo", "t": "dash", "len": 9.0, "m": 2.6, "cd": 5.0},
 		"s2": {"n": "Sigilo", "t": "buff", "k": "crit", "dur": 6.0, "cd": 18.0}},
-	"mago": {"n": "Mago", "d": "Proyectiles y meteoros.", "hp": 200, "atk": 30, "def": 4, "range": 16.0, "arc": 0.0, "spd": 8.0, "cd": 0.5, "w": "staff", "ranged": true,
+	"mago": {"n": "Mago", "d": "Proyectiles y meteoros.", "p": "Arcanista del tomo vivo. Castiga a distancia con proyectiles y hace caer meteoros.", "arma": "Báculo arcano", "hp": 200, "atk": 30, "def": 4, "range": 16.0, "arc": 0.0, "spd": 8.0, "cd": 0.5, "w": "staff", "ranged": true,
 		"s1": {"n": "Meteoro", "t": "aoe", "r": 6.0, "m": 3.0, "cd": 7.0, "far": true},
 		"s2": {"n": "Escudo", "t": "buff", "k": "escudo", "dur": 8.0, "cd": 20.0}},
-	"chaman": {"n": "Chamán", "d": "Rayos en cadena y curación.", "hp": 260, "atk": 21, "def": 6, "range": 13.0, "arc": 0.0, "spd": 8.5, "cd": 0.45, "w": "staff", "ranged": true,
+	"chaman": {"n": "Chamán", "d": "Rayos en cadena y curación.", "p": "Portavoz de los espíritus. Encadena rayos entre enemigos y cura sus propias heridas.", "arma": "Bastón de calavera", "hp": 260, "atk": 21, "def": 6, "range": 13.0, "arc": 0.0, "spd": 8.5, "cd": 0.45, "w": "staff", "ranged": true,
 		"s1": {"n": "Rayo", "t": "chain", "m": 2.0, "cd": 6.0},
 		"s2": {"n": "Curar", "t": "heal", "cd": 16.0}},
 }
@@ -98,6 +98,10 @@ var hmap_tex: ImageTexture
 var grass_mat: ShaderMaterial
 var shot_dir = ""
 var ash: CPUParticles3D
+var preview = null
+var preview_light: OmniLight3D
+var STYLES = {"guerrero": "knight", "asesino": "rogue", "mago": "mage", "chaman": "shaman"}
+const PV = Vector3(3.0, 0.0, 8.0)
 var fires = []
 
 var test_mode = false
@@ -689,9 +693,8 @@ func build_player() -> void:
 		pg.remove_child(c)
 		c.queue_free()
 	var C = CLASES[S["clase"]]
-	var styles = {"guerrero": "knight", "asesino": "rogue", "mago": "mage", "chaman": "shaman"}
 	var kc: Color = REINOS[S["reino"]]["c"]
-	pm = Build.humanoid({"style": styles[S["clase"]], "cloth": kc, "weapon": C["w"], "cape": kc.darkened(0.2)})
+	pm = Build.humanoid({"style": STYLES[S["clase"]], "cloth": kc, "weapon": C["w"], "cape": kc.darkened(0.2)})
 	pg.add_child(pm["root"])
 	ph = Build.horse()
 	ph["root"].visible = false
@@ -706,7 +709,7 @@ func recalc() -> void:
 	patk = C["atk"] + S["lvl"] * 3 + S["wpn"] * (4 + S["wpn"])
 	pdef = C["def"] + S["lvl"] + S["arm"] * (3 + S["arm"])
 	if pm.has("blade") and pm["blade"] != null:
-		pm["blade"].emission_energy_multiplier = S["wpn"] / 9.0 * 2.5
+		pm["blade"].emission_energy_multiplier = max(1.8 if CLASES[S["clase"]]["w"] == "staff" else 0.0, S["wpn"] / 9.0 * 2.5)
 	php = min(php, pmaxhp)
 
 
@@ -727,6 +730,11 @@ func begin(state) -> void:
 	cam_yaw = 0.0
 	cam_t = Vector3(0, 1.5, 6)
 	dead_t = 0.0
+	if preview != null:
+		preview["root"].queue_free()
+		preview = null
+	if preview_light != null:
+		preview_light.visible = false
 	build_player()
 	while stones.size() < 5:
 		spawn_stone()
@@ -1678,9 +1686,11 @@ func upd_world(dt: float) -> void:
 
 func upd_cam(dt: float) -> void:
 	if not running:
-		var a = time * 0.12
-		cam.position = Vector3(sin(a) * 34.0, 15.0, cos(a) * 34.0)
-		cam.look_at(Vector3(0, 3, 0), Vector3.UP)
+		cam.position = PV + Vector3(-1.6 + sin(time * 0.3) * 0.15, 1.75, 5.0)
+		cam.look_at(PV + Vector3(-1.75, 1.3, 0), Vector3.UP)
+		if preview != null:
+			Build.anim_h(preview, time, false, 0.0)
+			preview["root"].rotation.y = sin(time * 0.6) * 0.4 - 0.15
 		return
 	var k = min(1.0, dt * 10.0)
 	cam_t.x += (px - cam_t.x) * k
@@ -1699,6 +1709,17 @@ func run_test() -> void:
 	var f = test_f
 	if f == 1:
 		shot_dir = OS.get_environment("CR_SHOTS")
+	if OS.has_environment("CR_MENU"):
+		var mc = OS.get_environment("CR_TEST")
+		if f == 2 and CLASES.has(mc):
+			hud._pick_clase(mc)
+			hud._pick_reino(OS.get_environment("CR_MENU"))
+		if f == 12 and shot_dir != "":
+			shot("menu_" + mc)
+		if f == 20:
+			print("CR_TEST_OK menu ", mc)
+			get_tree().quit()
+		return
 	if shot_dir != "" and f in [1, 30, 120, 175, 260, 300, 350, 420]:
 		shot("f" + str(f))
 	if f == 2:
@@ -1774,3 +1795,21 @@ func shot(shot_name: String) -> void:
 	var img = get_viewport().get_texture().get_image()
 	if img != null:
 		img.save_png(shot_dir + "/" + shot_name + ".png")
+
+
+func set_preview(reino: String, clase: String) -> void:
+	if running:
+		return
+	if preview != null:
+		preview["root"].queue_free()
+	var kc: Color = REINOS[reino]["c"]
+	preview = Build.humanoid({"style": STYLES[clase], "cloth": kc, "weapon": CLASES[clase]["w"], "cape": kc.darkened(0.2)})
+	preview["root"].position = PV
+	add_child(preview["root"])
+	if preview_light == null:
+		preview_light = OmniLight3D.new()
+		preview_light.light_color = Color("ffe2c0")
+		preview_light.light_energy = 3.5
+		preview_light.omni_range = 9.0
+		preview_light.position = PV + Vector3(-1.8, 2.8, 3.0)
+		add_child(preview_light)

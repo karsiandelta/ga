@@ -218,3 +218,14 @@ void fragment() {
 	EMISSION = vec3(1.0, 0.32, 0.06) * ember * smoothstep(edge - 0.25, edge, UV.y) * 3.0;
 }
 """
+
+const OUTLINE = """
+shader_type spatial;
+render_mode cull_front, unshaded, shadows_disabled;
+void vertex() {
+	VERTEX += NORMAL * 0.022;
+}
+void fragment() {
+	ALBEDO = vec3(0.012, 0.008, 0.02);
+}
+"""
