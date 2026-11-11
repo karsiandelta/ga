@@ -83,24 +83,23 @@ jobs:
 
       - name: Render real con capturas (comprueba shaders)
         run: |
-          for i in 1 2 3 4; do
-            sudo apt-get update -qq && sudo apt-get install -y -qq xvfb mesa-vulkan-drivers libvulkan1 > /dev/null && break
-            sleep 20
-          done
           mkdir -p shots
-          CR_TEST=guerrero CR_SHOTS=$PWD/shots timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot-bin/godot --rendering-method mobile --resolution 1280x720 --fixed-fps 30 2>&1 | tee render.log | grep -E "ERROR|WARNING|Vulkan|OpenGL|CR_TEST|at:" | head -80 || true
+          which xvfb-run || (sudo apt-get update -qq; sudo apt-get install -y -qq xvfb > /dev/null) || true
+          CR_TEST=guerrero CR_SHOTS=$PWD/shots LIBGL_ALWAYS_SOFTWARE=1 timeout 600 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot-bin/godot --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 1280x720 --fixed-fps 30 > render.log 2>&1 || true
+          grep -E "ERROR|WARNING|OpenGL|CR_TEST|at:" render.log | head -60 || true
           ls -la shots
-          if grep -qE "SHADER ERROR|SCRIPT ERROR|Shader compilation failed" render.log; then echo "::error::Errores de shader"; grep -B2 -A12 -E "SHADER ERROR|Shader compilation failed" render.log | head -120; exit 1; fi
+          if grep -qE "SHADER ERROR|SCRIPT ERROR|Shader compilation failed" render.log; then echo "::error::Errores de shader"; grep -B2 -A14 -E "SHADER ERROR|Shader compilation failed" render.log | head -150; exit 1; fi
           grep -q "CR_TEST_OK" render.log
 
-      - name: Guardar capturas
+      - name: Publicar capturas en una rama
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: capturas
-          path: |
-            shots
-            render.log
+        run: |
+          mkdir -p /tmp/cap && cp -r shots/* /tmp/cap/ 2>/dev/null || true
+          tail -c 20000 render.log > /tmp/cap/render.log 2>/dev/null || true
+          cd /tmp/cap && git init -q -b cielo-roto-capturas
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add -A && git commit -q -m "Capturas ${{ github.run_number }}" || true
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" cielo-roto-capturas || true
 
       - name: Exportar APK
         run: |
