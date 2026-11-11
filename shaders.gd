@@ -31,23 +31,26 @@ void fragment() {
 	float n2 = texture(noise_tex, wp.xz * 0.13).r;
 	float n3 = texture(noise_tex, wp.xz * 0.7).r;
 	float dist = length(wp.xz);
-	vec3 grass = mix(vec3(0.07, 0.16, 0.04), vec3(0.16, 0.24, 0.05), n1) * (0.75 + 0.5 * n2);
-	vec3 dry = vec3(0.30, 0.24, 0.08) * (0.75 + 0.5 * n2);
-	grass = mix(grass, dry, smoothstep(170.0, 270.0, dist) * 0.7);
-	vec3 dirt = vec3(0.27, 0.215, 0.15) * (0.8 + 0.25 * n3) * (0.85 + 0.3 * n1);
-	vec3 rock = vec3(0.20, 0.19, 0.18) * (0.6 + 0.8 * n2) * (0.8 + 0.4 * n3);
-	vec3 sand = vec3(0.42, 0.36, 0.22) * (0.8 + 0.3 * n3);
+	vec3 grass = mix(vec3(0.030, 0.050, 0.028), vec3(0.070, 0.078, 0.036), n1) * (0.7 + 0.6 * n2);
+	vec3 ash = vec3(0.085, 0.080, 0.078) * (0.7 + 0.6 * n2);
+	grass = mix(grass, ash, smoothstep(150.0, 260.0, dist) * 0.85);
+	vec3 mud = vec3(0.070, 0.055, 0.045) * (0.75 + 0.5 * n3) * (0.8 + 0.4 * n1);
+	float cob = smoothstep(0.42, 0.5, fract(n3 * 5.0 + n2 * 3.0));
+	vec3 cobble = mix(vec3(0.045, 0.045, 0.05), vec3(0.13, 0.125, 0.12), cob) * (0.8 + 0.4 * n1);
+	vec3 rock = vec3(0.075, 0.075, 0.085) * (0.6 + 0.8 * n2) * (0.8 + 0.4 * n3);
+	vec3 silt = vec3(0.085, 0.075, 0.06) * (0.8 + 0.3 * n3);
 	float slope = 1.0 - normalize(wn).y;
 	vec3 col = mix(grass, rock, smoothstep(0.10, 0.22, slope + (n2 - 0.5) * 0.08));
 	float town = 1.0 - smoothstep(21.0, 31.0, dist + (n2 - 0.5) * 9.0);
 	float road = 1.0 - smoothstep(2.0, 4.5, abs(wp.x) + (n2 - 0.5) * 2.0);
 	road *= step(wp.z, -10.0) * step(-225.0, wp.z);
 	float arena = 1.0 - smoothstep(12.0, 20.0, length(wp.xz - vec2(0.0, -215.0)) + (n2 - 0.5) * 6.0);
-	col = mix(col, dirt, max(max(town, road), arena) * 0.92);
-	col = mix(col, sand, 1.0 - smoothstep(-2.1, -1.3, wp.y + (n3 - 0.5) * 0.4));
+	col = mix(col, mud, max(road, arena) * 0.92);
+	col = mix(col, cobble, town * 0.95);
+	col = mix(col, silt, 1.0 - smoothstep(-2.1, -1.3, wp.y + (n3 - 0.5) * 0.4));
 	ALBEDO = col;
-	ROUGHNESS = 0.95;
-	SPECULAR = 0.1;
+	ROUGHNESS = mix(0.95, 0.55, town * cob);
+	SPECULAR = 0.2;
 }
 """
 
@@ -87,10 +90,10 @@ void vertex() {
 }
 void fragment() {
 	float n1 = texture(noise_tex, wp.xz * 0.02).r;
-	vec3 base = mix(vec3(0.10, 0.21, 0.05), vec3(0.20, 0.29, 0.07), n1);
-	vec3 tip = mix(vec3(0.22, 0.40, 0.08), vec3(0.42, 0.46, 0.12), n1);
+	vec3 base = mix(vec3(0.028, 0.046, 0.026), vec3(0.060, 0.068, 0.032), n1);
+	vec3 tip = mix(vec3(0.085, 0.115, 0.055), vec3(0.20, 0.185, 0.10), n1);
 	vec3 col = mix(base, tip, hf);
-	col = mix(col, vec3(0.42, 0.34, 0.12) * (0.6 + 0.6 * hf), smoothstep(170.0, 270.0, length(wp.xz)) * 0.7);
+	col = mix(col, vec3(0.16, 0.15, 0.14) * (0.4 + 0.8 * hf), smoothstep(150.0, 260.0, length(wp.xz)) * 0.8);
 	ALBEDO = col;
 	ROUGHNESS = 0.85;
 	SPECULAR = 0.15;
@@ -109,14 +112,14 @@ void fragment() {
 	float n1 = texture(noise_tex, wp.xz * 0.03 + TIME * vec2(0.010, 0.006)).r;
 	float n2 = texture(noise_tex, wp.xz * 0.08 - TIME * vec2(0.012, 0.010)).r;
 	float w = n1 * n2;
-	ALBEDO = mix(vec3(0.01, 0.07, 0.10), vec3(0.04, 0.20, 0.22), clamp(w * 2.2, 0.0, 1.0));
+	ALBEDO = mix(vec3(0.003, 0.010, 0.010), vec3(0.018, 0.045, 0.035), clamp(w * 2.2, 0.0, 1.0));
 	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 	ALPHA = mix(0.78, 0.97, fres);
 	ROUGHNESS = 0.06;
 	SPECULAR = 0.9;
 	vec3 bump = (VIEW_MATRIX * vec4((n1 - 0.5) * 0.35, 0.0, (n2 - 0.5) * 0.35, 0.0)).xyz;
 	NORMAL = normalize(NORMAL + bump);
-	EMISSION = vec3(0.5, 0.7, 0.75) * smoothstep(0.34, 0.40, w) * 0.25 + vec3(0.25, 0.4, 0.45) * fres * 0.35;
+	EMISSION = vec3(0.35, 0.55, 0.5) * smoothstep(0.34, 0.40, w) * 0.10 + vec3(0.10, 0.14, 0.16) * fres * 0.30;
 }
 """
 
@@ -125,20 +128,23 @@ shader_type sky;
 uniform sampler2D noise_tex : repeat_enable, filter_linear;
 void sky() {
 	vec3 d = normalize(EYEDIR);
-	vec3 top = vec3(0.10, 0.26, 0.52);
-	vec3 horizon = vec3(0.80, 0.62, 0.42);
-	vec3 col = mix(horizon, top, pow(clamp(d.y, 0.0, 1.0), 0.42));
+	vec3 top = vec3(0.010, 0.018, 0.034);
+	vec3 horizon = vec3(0.13, 0.060, 0.045);
+	vec3 col = mix(horizon, top, pow(clamp(d.y, 0.0, 1.0), 0.33));
 	if (d.y < 0.0) {
-		col = mix(horizon, vec3(0.30, 0.36, 0.34), clamp(-d.y * 4.0, 0.0, 1.0));
+		col = mix(horizon, vec3(0.03, 0.035, 0.04), clamp(-d.y * 4.0, 0.0, 1.0));
 	}
 	float s = max(dot(d, LIGHT0_DIRECTION), 0.0);
-	col += LIGHT0_COLOR * (pow(s, 900.0) * 6.0 + pow(s, 14.0) * 0.30);
+	vec3 moon = vec3(0.75, 0.85, 1.0);
+	col += moon * (smoothstep(0.9990, 0.9994, s) * 3.0 + pow(s, 40.0) * 0.22 + pow(s, 6.0) * 0.05);
 	if (d.y > 0.01) {
 		vec2 uv = d.xz / (d.y + 0.18);
 		float c = texture(noise_tex, uv * 0.11).r * 0.65 + texture(noise_tex, uv * 0.37 + vec2(0.3, 0.1)).r * 0.35;
-		float m = smoothstep(0.50, 0.70, c) * smoothstep(0.01, 0.22, d.y);
-		vec3 lit = mix(vec3(0.95, 0.78, 0.62), vec3(1.0, 0.97, 0.92), clamp(c * 1.2 - 0.3, 0.0, 1.0));
-		col = mix(col, lit + LIGHT0_COLOR * s * 0.2, m * 0.92);
+		float m = smoothstep(0.43, 0.63, c) * smoothstep(0.01, 0.2, d.y);
+		vec3 lit = mix(vec3(0.020, 0.024, 0.032), vec3(0.11, 0.12, 0.15), clamp(c * 1.4 - 0.5, 0.0, 1.0));
+		lit += moon * pow(s, 8.0) * 0.25;
+		lit = mix(lit, vec3(0.16, 0.06, 0.04), (1.0 - smoothstep(0.0, 0.25, d.y)) * 0.6);
+		col = mix(col, lit, m * 0.95);
 	}
 	COLOR = col;
 }
@@ -195,17 +201,20 @@ void fragment() {
 const CAPE = """
 shader_type spatial;
 render_mode cull_disabled;
-uniform vec3 tint : source_color = vec3(0.7, 0.2, 0.2);
+uniform vec3 tint : source_color = vec3(0.4, 0.08, 0.08);
+uniform float ember = 0.0;
 void vertex() {
 	float k = UV.y;
 	VERTEX.z -= k * 0.22 + sin(TIME * 4.0 + UV.y * 5.0 + UV.x * 2.0) * 0.07 * k;
 	VERTEX.x += sin(TIME * 2.7 + UV.y * 4.0) * 0.03 * k;
 }
 void fragment() {
-	ALBEDO = tint * (0.75 + 0.25 * sin(UV.x * 40.0) * 0.2 + 0.25 * (1.0 - UV.y));
-	if (UV.y > 0.9) {
-		ALBEDO = vec3(0.70, 0.48, 0.12);
+	float edge = 0.80 + 0.12 * sin(UV.x * 31.0) + 0.06 * sin(UV.x * 77.0 + 1.3);
+	if (UV.y > edge) {
+		discard;
 	}
-	ROUGHNESS = 0.8;
+	ALBEDO = tint * (0.55 + 0.45 * (1.0 - UV.y)) * (0.9 + 0.1 * sin(UV.x * 60.0));
+	ROUGHNESS = 0.9;
+	EMISSION = vec3(1.0, 0.32, 0.06) * ember * smoothstep(edge - 0.25, edge, UV.y) * 3.0;
 }
 """

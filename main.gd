@@ -11,9 +11,9 @@ const CH = [95, 90, 80, 70, 60, 50, 40, 30, 22]
 const SMITH = Vector2(8, -6)
 
 var REINOS = {
-	"carmesi": {"n": "Carmesí", "c": Color("b5382f")},
-	"dorado": {"n": "Dorado", "c": Color("d2a23a")},
-	"azur": {"n": "Azur", "c": Color("2f6fb5")},
+	"carmesi": {"n": "Carmesí", "c": Color("8a1f1a")},
+	"dorado": {"n": "Dorado", "c": Color("a07c22")},
+	"azur": {"n": "Azur", "c": Color("1f4f8f")},
 }
 var CLASES = {
 	"guerrero": {"n": "Guerrero", "d": "Espada pesada, mucha vida.", "hp": 320, "atk": 22, "def": 8, "range": 3.3, "arc": 2.3, "spd": 8.5, "cd": 0.42, "w": "sword", "ranged": false,
@@ -30,10 +30,10 @@ var CLASES = {
 		"s2": {"n": "Curar", "t": "heal", "cd": 16.0}},
 }
 var TIPOS = {
-	"lobo": {"n": "Lobo gris", "hp": 0.8, "dmg": 0.8, "spd": 6.5, "range": 2.0, "quad": true, "col": Color("77736c"), "s": 0.9, "ghost": false, "boss": false},
-	"jabali": {"n": "Jabalí", "hp": 1.3, "dmg": 1.0, "spd": 5.5, "range": 2.2, "quad": true, "col": Color("5a3e2c"), "s": 1.15, "ghost": false, "boss": false},
-	"bandido": {"n": "Bandido", "hp": 1.0, "dmg": 1.1, "spd": 6.0, "range": 2.3, "quad": false, "col": Color("4a4038"), "s": 1.0, "ghost": false, "boss": false},
-	"tigre": {"n": "Tigre", "hp": 1.4, "dmg": 1.4, "spd": 7.5, "range": 2.4, "quad": true, "col": Color("d98a2b"), "s": 1.3, "ghost": false, "boss": false},
+	"lobo": {"n": "Huargo", "hp": 0.8, "dmg": 0.8, "spd": 6.5, "range": 2.0, "quad": true, "col": Color("23232b"), "s": 0.9, "ghost": false, "boss": false},
+	"jabali": {"n": "Jabalí corrupto", "hp": 1.3, "dmg": 1.0, "spd": 5.5, "range": 2.2, "quad": true, "col": Color("33261f"), "s": 1.15, "ghost": false, "boss": false},
+	"bandido": {"n": "Esqueleto", "hp": 1.0, "dmg": 1.1, "spd": 6.0, "range": 2.3, "quad": false, "col": Color("4a4038"), "s": 1.0, "ghost": false, "boss": false},
+	"tigre": {"n": "Bestia de ceniza", "hp": 1.4, "dmg": 1.4, "spd": 7.5, "range": 2.4, "quad": true, "col": Color("2b2725"), "s": 1.3, "ghost": false, "boss": false},
 	"espectro": {"n": "Espectro", "hp": 1.1, "dmg": 1.2, "spd": 6.2, "range": 2.3, "quad": false, "col": Color("8fd8c8"), "s": 1.0, "ghost": true, "boss": false},
 	"jefe": {"n": "Señor de Ceniza", "hp": 30.0, "dmg": 1.6, "spd": 5.2, "range": 4.0, "quad": false, "col": Color("2a1a18"), "s": 2.6, "ghost": false, "boss": true},
 }
@@ -97,6 +97,8 @@ var noise_tex: NoiseTexture2D
 var hmap_tex: ImageTexture
 var grass_mat: ShaderMaterial
 var shot_dir = ""
+var ash: CPUParticles3D
+var fires = []
 
 var test_mode = false
 var test_f = 0
@@ -242,33 +244,53 @@ func build_env() -> void:
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("a9b8c8")
-	env.ambient_light_energy = 0.42
+	env.ambient_light_color = Color("5a6a86")
+	env.ambient_light_energy = 0.75
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_white = 6.0
+	env.tonemap_white = 5.0
 	env.glow_enabled = true
-	env.glow_intensity = 0.45
-	env.glow_bloom = 0.08
+	env.glow_intensity = 0.7
+	env.glow_bloom = 0.05
 	env.fog_enabled = true
-	env.fog_light_color = Color("aebcc4")
-	env.fog_density = 0.0028
-	env.fog_sky_affect = 0.15
-	env.fog_aerial_perspective = 0.4
+	env.fog_light_color = Color("1e252c")
+	env.fog_density = 0.011
+	env.fog_sky_affect = 0.25
+	env.fog_aerial_perspective = 0.3
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.18
-	env.adjustment_contrast = 1.06
+	env.adjustment_saturation = 0.92
+	env.adjustment_contrast = 1.1
 	var we = WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
-	var sun = DirectionalLight3D.new()
-	sun.light_color = Color("ffdfb0")
-	sun.light_energy = 1.15
-	sun.shadow_enabled = true
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.directional_shadow_max_distance = 80.0
-	sun.shadow_blur = 1.5
-	sun.rotation_degrees = Vector3(-38, 40, 0)
-	add_child(sun)
+	var moon = DirectionalLight3D.new()
+	moon.light_color = Color("a9c0e8")
+	moon.light_energy = 1.7
+	moon.shadow_enabled = true
+	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	moon.directional_shadow_max_distance = 80.0
+	moon.shadow_blur = 1.5
+	moon.rotation_degrees = Vector3(-34, 128, 0)
+	add_child(moon)
+	ash = CPUParticles3D.new()
+	ash.amount = 140
+	ash.lifetime = 6.0
+	ash.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	ash.emission_box_extents = Vector3(24, 7, 24)
+	ash.direction = Vector3(0, -1, 0)
+	ash.spread = 35.0
+	ash.gravity = Vector3(0.5, -0.35, 0.2)
+	ash.initial_velocity_min = 0.2
+	ash.initial_velocity_max = 0.8
+	ash.scale_amount_min = 0.5
+	ash.scale_amount_max = 1.4
+	var q = QuadMesh.new()
+	q.size = Vector2(0.07, 0.07)
+	var am = Build.flat(Color("b9b4ac"), 0.7)
+	am.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	q.material = am
+	ash.mesh = q
+	ash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(ash)
 
 
 func build_terrain() -> void:
@@ -367,18 +389,25 @@ func multimesh(mesh: Mesh, count: int, colors: bool) -> MultiMesh:
 func build_props() -> void:
 	var n = 230
 	var trunk_mesh = CylinderMesh.new()
-	trunk_mesh.top_radius = 0.18
-	trunk_mesh.bottom_radius = 0.38
-	trunk_mesh.height = 3.2
-	trunk_mesh.radial_segments = 8
-	trunk_mesh.material = Build.mat(Color("3a281c"))
+	trunk_mesh.top_radius = 0.13
+	trunk_mesh.bottom_radius = 0.4
+	trunk_mesh.height = 3.6
+	trunk_mesh.radial_segments = 7
+	trunk_mesh.material = Build.mat(Color("17120f"))
+	var branch_mesh = CylinderMesh.new()
+	branch_mesh.top_radius = 0.02
+	branch_mesh.bottom_radius = 0.1
+	branch_mesh.height = 2.0
+	branch_mesh.radial_segments = 5
+	branch_mesh.material = Build.mat(Color("17120f"))
 	var top_mesh = SphereMesh.new()
 	top_mesh.radius = 1.5
 	top_mesh.height = 3.0
 	top_mesh.radial_segments = 14
 	top_mesh.rings = 8
-	top_mesh.material = Sh.mat(Sh.BLOB, {"noise_tex": noise_tex, "sway": 0.12, "bump": 0.9})
+	top_mesh.material = Sh.mat(Sh.BLOB, {"noise_tex": noise_tex, "sway": 0.12, "bump": 1.1})
 	var trunks = multimesh(trunk_mesh, n, false)
+	var branches = multimesh(branch_mesh, n * 5, false)
 	var tops = multimesh(top_mesh, n * 3, true)
 	for i in range(n):
 		var x = 0.0
@@ -388,24 +417,33 @@ func build_props() -> void:
 			x = randf_range(-290, 290)
 			z = randf_range(-290, 290)
 			var r = Vector2(x, z).length()
-			ok = r > 34.0 and r < 288.0 and ground_h(x, z) > -1.4 and (abs(x) > 7.0 or z > -20.0) and Vector2(x, z + 215.0).length() > 24.0
+			ok = r > 34.0 and r < 288.0 and ground_h(x, z) > -1.4 and (abs(x) > 7.0 or z > -20.0) and Vector2(x, z + 215.0).length() > 24.0 and Vector2(x + 36.0, z - 4.0).length() > 11.0
 		var s = randf_range(0.8, 1.7)
 		var gy = ground_h(x, z)
-		trunks.set_instance_transform(i, Transform3D(Basis(Vector3.UP, randf() * TAU).scaled(Vector3(s, s, s)), Vector3(x, gy + 1.5 * s, z)))
+		var lean = Basis(Vector3(1, 0, 0), randf_range(-0.12, 0.12)).rotated(Vector3.UP, randf() * TAU)
+		trunks.set_instance_transform(i, Transform3D(lean.scaled(Vector3(s, s, s)), Vector3(x, gy + 1.7 * s, z)))
+		var top_p = Vector3(x, gy + 3.3 * s, z)
+		for j in range(5):
+			var bb = Basis(Vector3(1, 0, 0), randf_range(0.5, 1.2)).rotated(Vector3.UP, j * 1.26 + randf_range(-0.4, 0.4))
+			var bl = s * randf_range(0.7, 1.2)
+			bb = bb.scaled(Vector3(s, bl, s))
+			var base_p = top_p - Vector3(0, randf_range(0.0, 1.2) * s, 0)
+			branches.set_instance_transform(i * 5 + j, Transform3D(bb, base_p + bb * Vector3(0, 1.0, 0)))
 		var k = randf()
-		var c = Color.from_hsv(randf_range(0.26, 0.36), 0.75, randf_range(0.22, 0.36))
-		if k < 0.2:
-			c = Color.from_hsv(randf_range(0.0, 0.04), 0.85, 0.55)
-		elif k < 0.3:
-			c = Color.from_hsv(0.09, 0.9, 0.7)
-		elif k < 0.4:
-			c = Color.from_hsv(0.93, 0.45, 0.85)
+		var bare = k < 0.38
+		var c = Color.from_hsv(randf_range(0.27, 0.40), 0.5, randf_range(0.10, 0.17))
+		if k > 0.85:
+			c = Color.from_hsv(randf_range(0.98, 1.0), 0.85, 0.30)
+		elif k > 0.75:
+			c = Color.from_hsv(0.08, 0.2, 0.22)
 		for j in range(3):
 			var off = Vector3(randf_range(-0.9, 0.9), randf_range(-0.4, 0.7), randf_range(-0.9, 0.9)) * s
 			if j == 0:
 				off = Vector3.ZERO
 			var bs = s * (1.0 if j == 0 else randf_range(0.55, 0.8))
-			tops.set_instance_transform(i * 3 + j, Transform3D(Basis(Vector3.UP, randf() * TAU).scaled(Vector3(bs, bs * 0.85, bs)), Vector3(x, gy + 3.6 * s, z) + off))
+			if bare:
+				bs = 0.001
+			tops.set_instance_transform(i * 3 + j, Transform3D(Basis(Vector3.UP, randf() * TAU).scaled(Vector3(bs, bs * 0.8, bs)), Vector3(x, gy + 3.9 * s, z) + off))
 			tops.set_instance_color(i * 3 + j, c * randf_range(0.85, 1.1))
 		colliders.append({"x": x, "z": z, "r": 0.5 * s, "stone": false})
 	var rn = 90
@@ -425,10 +463,54 @@ func build_props() -> void:
 		var s = randf_range(0.6, 2.4)
 		var b = Basis(Vector3(1, 0, 0), randf() * 3.0).rotated(Vector3.UP, randf() * 3.0).scaled(Vector3(s, s * 0.75, s))
 		rocks.set_instance_transform(i, Transform3D(b, Vector3(x, ground_h(x, z) + s * 0.25, z)))
-		var g = randf_range(0.30, 0.42)
-		rocks.set_instance_color(i, Color(g, g * 0.98, g * 0.94))
+		var g = randf_range(0.13, 0.2)
+		rocks.set_instance_color(i, Color(g, g, g * 1.1))
 		if s > 1.1:
 			colliders.append({"x": x, "z": z, "r": s * 0.85, "stone": false})
+	# ruinas dispersas
+	var stone_m = Build.mat(Color("46464c"))
+	for i in range(16):
+		var a = randf() * TAU
+		var d = randf_range(55.0, 260.0)
+		var cx = cos(a) * d
+		var cz = sin(a) * d
+		if ground_h(cx, cz) < -1.0 or (abs(cx) < 10.0 and cz < 0.0):
+			continue
+		var cnt = 4 + randi() % 4
+		for j in range(cnt):
+			var pa = j / float(cnt) * TAU
+			var x2 = cx + cos(pa) * 5.0
+			var z2 = cz + sin(pa) * 5.0
+			var h = randf_range(1.0, 5.5)
+			var col = Build.cyl(self, 0.42, 0.5, h, stone_m, at(x2, h / 2.0 - 0.2, z2), 10)
+			col.rotation.z = randf_range(-0.08, 0.08)
+			Build.box(self, Vector3(1.2, 0.3, 1.2), stone_m, at(x2, 0.1, z2))
+			if h > 4.0:
+				Build.box(self, Vector3(1.1, 0.3, 1.1), stone_m, at(x2, h - 0.1, z2))
+			colliders.append({"x": x2, "z": z2, "r": 0.7, "stone": false})
+		var fallen = Build.cyl(self, 0.42, 0.42, 3.5, stone_m, at(cx + 1.0, 0.35, cz), 10)
+		fallen.rotation = Vector3(PI / 2.0, randf() * 3.0, 0)
+	# cementerio al oeste de la aldea
+	var grave_m = Build.mat(Color("3c3d42"))
+	for i in range(22):
+		var gx = -36.0 + (i % 6) * 2.6 - 6.0 + randf_range(-0.4, 0.4)
+		var gz = 4.0 + int(i / 6.0) * 3.2 - 5.0 + randf_range(-0.4, 0.4)
+		var gp = at(gx, 0.0, gz)
+		var gn = Node3D.new()
+		gn.position = gp
+		gn.rotation = Vector3(randf_range(-0.12, 0.12), PI / 2.0 + randf_range(-0.2, 0.2), randf_range(-0.15, 0.15))
+		add_child(gn)
+		if i % 3 == 0:
+			Build.box(gn, Vector3(0.16, 1.5, 0.14), grave_m, Vector3(0, 0.7, 0))
+			Build.box(gn, Vector3(0.7, 0.16, 0.14), grave_m, Vector3(0, 1.05, 0))
+		else:
+			Build.box(gn, Vector3(0.7, 0.9, 0.16), grave_m, Vector3(0, 0.4, 0))
+			var topc = Build.cyl(gn, 0.35, 0.35, 0.16, grave_m, Vector3(0, 0.85, 0), 12)
+			topc.rotation.x = PI / 2.0
+		Build.box(gn, Vector3(0.8, 0.12, 1.7), Build.mat(Color("15120f")), Vector3(0, 0.02, 0.95))
+	for k2 in [-1.0, 1.0]:
+		Build.cyl(self, 0.06, 0.08, 2.6, Build.mat(Color("0b0a0c")), at(-36.0 + k2 * 9.0, 1.3, 13.0), 6)
+		Build.sphere(self, 0.16, Build.glow(Color("7dffd0"), 3.0), at(-36.0 + k2 * 9.0, 2.7, 13.0), 8)
 
 
 func sparks(parent: Node3D, pos: Vector3, col: Color, amount: int, radius: float) -> void:
@@ -455,71 +537,148 @@ func sparks(parent: Node3D, pos: Vector3, col: Color, amount: int, radius: float
 	parent.add_child(cp)
 
 
-func house(x: float, z: float, w: float, rot: float, tiers: int) -> void:
-	var wall = Build.mat(Color("e9dfc8"))
-	var wood = Build.mat(Color("5a2f22"))
-	var roof = Build.mat(Color("2f4a44"))
+func house(x: float, z: float, w: float, rot: float, kind: int) -> void:
+	var stone = Build.mat(Color("3a3a3f"))
+	var plaster = Build.mat(Color("4a4640"))
+	if kind == 2:
+		plaster = Build.mat(Color("44454b"))
+	var timber = Build.mat(Color("120e0c"))
+	var slate = Build.mat(Color("16181d"))
+	var d = w * 0.8
 	var g = Node3D.new()
 	g.position = at(x, 0.0, z)
 	g.rotation.y = rot
 	add_child(g)
-	Build.box(g, Vector3(w, 3, w * 0.8), wall, Vector3(0, 1.5, 0))
-	Build.box(g, Vector3(w + 0.2, 0.25, w * 0.8 + 0.2), wood, Vector3(0, 0.12, 0))
-	Build.box(g, Vector3(1.1, 2, 0.1), wood, Vector3(0, 1, w * 0.4 + 0.02))
-	Build.box(g, Vector3(w + 0.3, 0.6, w * 0.8 + 0.3), Build.mat(Color("6a6660")), Vector3(0, 0.3, 0))
-	var win = Build.glow(Color("ffc66a"), 1.8)
+	var wall_h = 2.8
+	if kind >= 1:
+		wall_h = 5.0
+	Build.box(g, Vector3(w + 0.3, 0.8, d + 0.3), stone, Vector3(0, 0.4, 0))
+	Build.box(g, Vector3(w, wall_h, d), plaster, Vector3(0, 0.8 + wall_h / 2.0, 0))
+	var top_y = 0.8 + wall_h
+	# entramado de madera
 	for sx in [-1.0, 1.0]:
-		Build.box(g, Vector3(0.9, 0.9, 0.06), win, Vector3(sx * w * 0.3, 1.9, w * 0.4 + 0.02))
-		Build.box(g, Vector3(1.0, 0.08, 0.1), wood, Vector3(sx * w * 0.3, 1.9, w * 0.4 + 0.04))
-		Build.box(g, Vector3(0.08, 1.0, 0.1), wood, Vector3(sx * w * 0.3, 1.9, w * 0.4 + 0.04))
-		Build.box(g, Vector3(0.2, 3.0, 0.2), wood, Vector3(sx * w * 0.5, 1.5, w * 0.4))
-		Build.box(g, Vector3(0.2, 3.0, 0.2), wood, Vector3(sx * w * 0.5, 1.5, -w * 0.4))
-	var y = 3.0
-	for t in range(tiers):
-		var rw = (w * 1.05) * (1.0 - t * 0.3)
-		var e = Build.cyl(g, rw * 0.75, rw * 1.15, 0.3, wood, Vector3(0, y + 0.15, 0), 4)
-		e.rotation.y = PI / 4.0
-		e.scale.z = 0.85
-		var r = Build.cyl(g, 0.0, rw, 1.5, roof, Vector3(0, y + 1.05, 0), 4)
-		r.rotation.y = PI / 4.0
-		r.scale.z = 0.85
-		if t < tiers - 1:
-			Build.box(g, Vector3(w * 0.55 * (1.0 - t * 0.2), 1, w * 0.45), wall, Vector3(0, y + 1.6, 0))
-			y += 2.0
-		else:
-			Build.sphere(g, 0.22, Build.glow(Color("d8b25a"), 0.6), Vector3(0, y + 1.9, 0), 8)
+		for sz in [-1.0, 1.0]:
+			Build.box(g, Vector3(0.24, wall_h, 0.24), timber, Vector3(sx * w * 0.5, 0.8 + wall_h / 2.0, sz * d * 0.5))
+	for sz in [-1.0, 1.0]:
+		Build.box(g, Vector3(w + 0.2, 0.2, 0.2), timber, Vector3(0, top_y, sz * d * 0.5))
+		Build.box(g, Vector3(w + 0.2, 0.18, 0.2), timber, Vector3(0, 0.9, sz * d * 0.5))
+		if kind >= 1:
+			Build.box(g, Vector3(w + 0.5, 0.22, 0.3), timber, Vector3(0, 3.4, sz * d * 0.5))
+	if kind != 2:
+		for sx in [-1.0, 1.0]:
+			var br = Build.box(g, Vector3(0.14, 2.3, 0.1), timber, Vector3(sx * w * 0.36, top_y - 1.0, d * 0.5 + 0.02))
+			br.rotation.z = sx * 0.55
+	# puerta y ventanas
+	Build.box(g, Vector3(1.2, 2.1, 0.12), Build.mat(Color("1d140f")), Vector3(0, 1.85, d * 0.5 + 0.03))
+	Build.box(g, Vector3(1.3, 0.1, 0.16), Build.metal(Color("2a2a2e")), Vector3(0, 2.3, d * 0.5 + 0.05))
+	Build.box(g, Vector3(1.3, 0.1, 0.16), Build.metal(Color("2a2a2e")), Vector3(0, 1.4, d * 0.5 + 0.05))
+	var win = Build.glow(Color("e07a2a"), 1.6)
+	if kind == 2:
+		win = Build.glow(Color("8a2a2a"), 2.2)
+	var wy = 2.2
+	if kind >= 1:
+		wy = 4.4
+	for sx in [-1.0, 1.0]:
+		Build.box(g, Vector3(0.7, 1.0 if kind != 2 else 1.8, 0.06), win, Vector3(sx * w * 0.3, wy, d * 0.5 + 0.02))
+		Build.box(g, Vector3(0.8, 0.07, 0.1), timber, Vector3(sx * w * 0.3, wy, d * 0.5 + 0.04))
+		Build.box(g, Vector3(0.07, 1.1 if kind != 2 else 1.9, 0.1), timber, Vector3(sx * w * 0.3, wy, d * 0.5 + 0.04))
+	# tejado a dos aguas muy inclinado
+	var roof_h = w * 0.85
+	Build.prism(g, Vector3(w + 0.9, roof_h, d + 0.9), slate, Vector3(0, top_y + roof_h / 2.0, 0))
+	Build.box(g, Vector3(0.16, 0.16, d + 1.1), timber, Vector3(0, top_y + roof_h, 0))
+	Build.box(g, Vector3(0.5, 0.6, 0.06), win, Vector3(0, top_y + roof_h * 0.32, d * 0.5 + 0.47))
+	# chimenea con humo
+	Build.box(g, Vector3(0.7, roof_h + 1.0, 0.7), stone, Vector3(-w * 0.3, top_y + roof_h * 0.5, -d * 0.2))
+	sparks(g, Vector3(-w * 0.3, top_y + roof_h + 1.2, -d * 0.2), Color("3a3a3e"), 10, 0.3)
+	if kind == 2:
+		# torre con aguja
+		Build.box(g, Vector3(2.4, 9.5, 2.4), plaster, Vector3(w * 0.5 - 0.6, 4.75, d * 0.5 + 0.6))
+		Build.box(g, Vector3(2.7, 0.3, 2.7), stone, Vector3(w * 0.5 - 0.6, 9.5, d * 0.5 + 0.6))
+		var spire = Build.cyl(g, 0.0, 1.9, 5.0, slate, Vector3(w * 0.5 - 0.6, 12.1, d * 0.5 + 0.6), 4)
+		spire.rotation.y = PI / 4.0
+		Build.cyl(g, 0.0, 0.08, 1.0, Build.metal(Color("2a2a2e")), Vector3(w * 0.5 - 0.6, 15.0, d * 0.5 + 0.6), 5)
+		Build.box(g, Vector3(0.6, 1.6, 0.06), win, Vector3(w * 0.5 - 0.6, 7.6, d * 0.5 + 1.82))
+		Build.sphere(g, 0.5, Build.metal(Color("3a332a"), 0.6), Vector3(w * 0.5 - 0.6, 8.6, d * 0.5 + 0.6), 10)
 	colliders.append({"x": x, "z": z, "r": w * 0.62, "stone": false})
 
 
+func brazier(x: float, z: float, h: float, energy: float) -> void:
+	var iron = Build.metal(Color("1c1c20"), 0.6)
+	Build.cyl(self, 0.07, 0.12, h, iron, at(x, h / 2.0, z), 6)
+	Build.cyl(self, 0.42, 0.2, 0.3, iron, at(x, h + 0.15, z), 8)
+	Build.cyl(self, 0.0, 0.3, 0.8, Build.glow(Color("ff7a1e"), 4.0), at(x, h + 0.65, z), 6)
+	sparks(self, at(x, h + 0.7, z), Color("ffa040"), 14, 0.25)
+	var l = OmniLight3D.new()
+	l.light_color = Color("ff8a3a")
+	l.light_energy = energy
+	l.omni_range = 16.0
+	l.omni_attenuation = 1.2
+	l.position = at(x, h + 1.0, z)
+	add_child(l)
+	fires.append({"l": l, "e": energy, "p": randf() * 10.0})
+	colliders.append({"x": x, "z": z, "r": 0.4, "stone": false})
+
+
 func build_village() -> void:
-	house(-12, -8, 6, 0.3, 2)
-	house(13, 9, 5.5, -0.5, 1)
-	house(-10, 12, 5, 0.9, 1)
-	house(15, -12, 6.5, -0.2, 3)
-	var red = Build.mat(Color("a8322a"))
-	for x in [-4.0, 4.0]:
-		Build.cyl(self, 0.35, 0.4, 6, red, Vector3(x, 3, -24), 8)
-		colliders.append({"x": x, "z": -24.0, "r": 0.6, "stone": false})
-	Build.box(self, Vector3(11, 0.5, 0.9), red, Vector3(0, 6, -24))
-	Build.box(self, Vector3(9, 0.35, 0.7), Build.mat(Color("2a2420")), Vector3(0, 5, -24))
+	house(-12, -8, 6, 0.3, 1)
+	house(13, 9, 5.5, -0.5, 0)
+	house(-10, 12, 5, 0.9, 0)
+	house(15, -12, 6.5, -0.2, 2)
+	# puerta norte de piedra
+	var stone = Build.mat(Color("36363b"))
+	var iron = Build.metal(Color("1c1c20"), 0.6)
+	for x in [-4.5, 4.5]:
+		Build.box(self, Vector3(1.6, 7, 1.6), stone, Vector3(x, 3.5, -24))
+		Build.box(self, Vector3(2.0, 0.4, 2.0), stone, Vector3(x, 7.1, -24))
+		var cap = Build.cyl(self, 0.0, 1.2, 1.6, Build.mat(Color("16181d")), Vector3(x, 8.1, -24), 4)
+		cap.rotation.y = PI / 4.0
+		colliders.append({"x": x, "z": -24.0, "r": 1.0, "stone": false})
+	Build.box(self, Vector3(8.0, 1.0, 1.2), stone, Vector3(0, 6.3, -24))
+	for i in range(9):
+		Build.cyl(self, 0.0, 0.07, 1.1, iron, Vector3(-3.2 + i * 0.8, 5.3, -24), 5).rotation.x = PI
+	var skull = Build.sphere(self, 0.3, Build.mat(Color("cfc6ae")), Vector3(0, 7.1, -23.5), 10)
+	skull.scale = Vector3(1.0, 1.1, 1.0)
+	brazier(-6.5, -22.5, 2.2, 3.0)
+	brazier(6.5, -22.5, 2.2, 3.0)
+	brazier(-9.0, 2.0, 2.0, 2.6)
+	brazier(4.0, 15.0, 2.0, 2.6)
+	# pozo
+	Build.cyl(self, 1.3, 1.4, 0.9, stone, Vector3(0, 0.45, -3), 12)
+	Build.cyl(self, 1.05, 1.05, 0.92, Build.mat(Color("050607")), Vector3(0, 0.46, -3), 12)
+	for k in [-1.0, 1.0]:
+		Build.box(self, Vector3(0.16, 2.4, 0.16), Build.mat(Color("120e0c")), Vector3(k * 1.2, 1.6, -3))
+	Build.prism(self, Vector3(3.0, 0.9, 1.6), Build.mat(Color("16181d")), Vector3(0, 3.2, -3))
+	colliders.append({"x": 0.0, "z": -3.0, "r": 1.5, "stone": false})
 	# forja
-	Build.box(self, Vector3(1.4, 0.7, 0.7), Build.mat(Color("33312f")), Vector3(SMITH.x + 1.6, 0.35, SMITH.y))
-	Build.box(self, Vector3(1.8, 0.25, 0.9), Build.mat(Color("222222")), Vector3(SMITH.x + 1.6, 0.82, SMITH.y))
-	Build.box(self, Vector3(1.2, 0.8, 1.2), Build.mat(Color("6a5a4c")), Vector3(SMITH.x - 1.5, 0.4, SMITH.y - 1))
-	Build.cyl(self, 0.0, 0.35, 0.9, Build.glow(Color("ff8a2a"), 3.0), Vector3(SMITH.x - 1.5, 1.2, SMITH.y - 1), 6)
-	sparks(self, Vector3(SMITH.x - 1.5, 1.4, SMITH.y - 1), Color("ffb060"), 16, 0.3)
-	var npc = Build.humanoid({"cloth": Color("4a3a30"), "trim": Color("d8b25a"), "weapon": "sword"})
+	Build.box(self, Vector3(1.4, 0.7, 0.7), Build.mat(Color("232224")), Vector3(SMITH.x + 1.6, 0.35, SMITH.y))
+	Build.box(self, Vector3(1.8, 0.25, 0.9), Build.metal(Color("1c1c20")), Vector3(SMITH.x + 1.6, 0.82, SMITH.y))
+	Build.box(self, Vector3(1.6, 1.0, 1.6), stone, Vector3(SMITH.x - 1.5, 0.5, SMITH.y - 1))
+	Build.cyl(self, 0.0, 0.45, 1.0, Build.glow(Color("ff6a1e"), 4.0), Vector3(SMITH.x - 1.5, 1.4, SMITH.y - 1), 6)
+	sparks(self, Vector3(SMITH.x - 1.5, 1.6, SMITH.y - 1), Color("ffb060"), 18, 0.3)
+	var fl = OmniLight3D.new()
+	fl.light_color = Color("ff7a2a")
+	fl.light_energy = 3.2
+	fl.omni_range = 14.0
+	fl.position = Vector3(SMITH.x - 1.2, 2.2, SMITH.y - 0.6)
+	add_child(fl)
+	fires.append({"l": fl, "e": 3.2, "p": 3.0})
+	for k in [-1.0, 1.0]:
+		Build.box(self, Vector3(0.2, 3.2, 0.2), Build.mat(Color("120e0c")), Vector3(SMITH.x + k * 2.6, 1.6, SMITH.y - 2.0))
+	var aw = Build.box(self, Vector3(6.0, 0.14, 3.2), Build.mat(Color("16181d")), Vector3(SMITH.x, 3.3, SMITH.y - 1.0))
+	aw.rotation.x = 0.25
+	var npc = Build.humanoid({"style": "smith", "cloth": Color("4a3526"), "weapon": "sword"})
 	npc["root"].position = Vector3(SMITH.x, 0, SMITH.y)
 	npc["root"].rotation.y = -0.6
 	add_child(npc["root"])
 	colliders.append({"x": SMITH.x, "z": SMITH.y, "r": 0.7, "stone": false})
-	mark = Build.sphere(self, 0.28, Build.glow(Color("d8b25a"), 2.0), Vector3(SMITH.x, 3.1, SMITH.y), 4)
-	for i in range(6):
-		var a = i / 6.0 * TAU
-		var lx = cos(a) * 20.0
-		var lz = sin(a) * 20.0
-		Build.cyl(self, 0.08, 0.1, 3, Build.mat(Color("2a2420")), Vector3(lx, 1.5, lz), 6)
-		Build.box(self, Vector3(0.5, 0.6, 0.5), Build.glow(Color("ffd27a"), 2.5), Vector3(lx, 3.2, lz))
+	mark = Build.sphere(self, 0.28, Build.glow(Color("d8b25a"), 2.0), Vector3(SMITH.x, 3.0, SMITH.y), 4)
+	# farolas del camino al norte
+	for i in range(8):
+		var lz = -40.0 - i * 24.0
+		var lx = 5.5 if i % 2 == 0 else -5.5
+		Build.cyl(self, 0.06, 0.1, 3.2, iron, at(lx, 1.6, lz), 6)
+		Build.box(self, Vector3(0.9, 0.08, 0.08), iron, at(lx - sign(lx) * 0.4, 3.1, lz))
+		Build.box(self, Vector3(0.3, 0.42, 0.3), Build.glow(Color("ff9a3a"), 2.5), at(lx - sign(lx) * 0.8, 2.75, lz))
 
 
 # ---------- jugador ----------
@@ -529,7 +688,9 @@ func build_player() -> void:
 		pg.remove_child(c)
 		c.queue_free()
 	var C = CLASES[S["clase"]]
-	pm = Build.humanoid({"cloth": REINOS[S["reino"]]["c"], "trim": Color("d8b25a"), "hat": S["clase"] != "guerrero", "weapon": C["w"], "cape": REINOS[S["reino"]]["c"].darkened(0.15)})
+	var styles = {"guerrero": "knight", "asesino": "rogue", "mago": "mage", "chaman": "shaman"}
+	var kc: Color = REINOS[S["reino"]]["c"]
+	pm = Build.humanoid({"style": styles[S["clase"]], "cloth": kc, "weapon": C["w"], "cape": kc.darkened(0.2)})
 	pg.add_child(pm["root"])
 	ph = Build.horse()
 	ph["root"].visible = false
@@ -574,7 +735,7 @@ func begin(state) -> void:
 	hud.show_playing()
 	save_game()
 	if state == null or S["xp"] == 0 and S["lvl"] == 1:
-		hud.banner("Reino " + REINOS[S["reino"]]["n"], "Sigue las columnas de luz y rompe las piedras")
+		hud.banner("Reino " + REINOS[S["reino"]]["n"], "Sigue las columnas de luz y destruye las piedras malditas")
 
 
 # ---------- entidades ----------
@@ -620,26 +781,13 @@ func spawn_enemy(x: float, z: float, type: String = "", lvl: int = 0, wave: bool
 	if D["quad"]:
 		model = Build.quad(D["col"], sc, type)
 	else:
-		var trim = Color("7a2a22")
-		var skin = Color("d9b08c")
+		var opts = {"style": "skeleton", "cloth": Color("5a1512"), "weapon": "sword"}
 		if D["boss"]:
-			trim = Color("cf4a40")
-			skin = Color("3a2a28")
+			opts = {"style": "lord", "cloth": Color("5a1512"), "weapon": "sword", "cape": Color("1a0a08")}
 		elif D["ghost"]:
-			trim = Color("dff5ee")
-			skin = Color("cfeee6")
-		var opts = {"cloth": D["col"], "trim": trim, "skin": skin, "ghost": D["ghost"], "weapon": "sword", "hat": type == "bandido"}
-		if D["boss"]:
-			opts["cape"] = Color("5a1410")
+			opts = {"style": "wraith", "cloth": Color("9fd8c8"), "weapon": ""}
 		model = Build.humanoid(opts)
 		model["root"].scale = Vector3.ONE * sc
-		if D["boss"]:
-			var eye = Build.glow(Color("ff5a2a"), 4.0)
-			Build.sphere(model["body"], 0.07, eye, Vector3(-0.1, 2.03, 0.24), 6)
-			Build.sphere(model["body"], 0.07, eye, Vector3(0.1, 2.03, 0.24), 6)
-			for k in [-1.0, 1.0]:
-				var h = Build.cyl(model["body"], 0.0, 0.08, 0.5, Build.mat(Color("d8b25a")), Vector3(k * 0.2, 2.4, 0), 5)
-				h.rotation.z = -k * 0.4
 	var g = Node3D.new()
 	g.add_child(model["root"])
 	g.position = at(x, 0.0, z)
@@ -1202,6 +1350,9 @@ func _process(delta: float) -> void:
 			save_t = 0.0
 			save_game()
 	upd_cam(dt)
+	ash.position = cam_t + Vector3(0, 6, 0)
+	for f in fires:
+		f["l"].light_energy = f["e"] * (0.82 + 0.18 * sin(time * 9.0 + f["p"]) * sin(time * 5.3 + f["p"] * 2.0))
 	grass_mat.set_shader_parameter("player_pos", Vector3(cam_t.x, 0, cam_t.z))
 
 

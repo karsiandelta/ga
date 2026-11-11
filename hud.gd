@@ -1,13 +1,13 @@
 extends Control
 # HUD táctil (dibujado a mano para admitir varios dedos a la vez) y menús.
 
-var GOLD = Color("d8b25a")
+var GOLD = Color("b99a5b")
 var JADE = Color("63c4a4")
-var BLOOD = Color("cf4a40")
-var PAPER = Color("efe6d2")
-var DIM = Color("b3a78e")
-var INK = Color("14110f")
-var LACQ = Color(0.09, 0.07, 0.06, 0.8)
+var BLOOD = Color("a8261f")
+var PAPER = Color("d9d0bd")
+var DIM = Color("8f8676")
+var INK = Color("0c0a0b")
+var LACQ = Color(0.035, 0.035, 0.045, 0.86)
 
 var game
 var font: Font
@@ -35,12 +35,19 @@ var btn_w: Button
 var btn_a: Button
 var btn_p: Button
 var icons = {}
+var title_font: Font
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	font = ThemeDB.fallback_font
+	title_font = font
+	if ResourceLoader.exists("res://ui/Cinzel.ttf"):
+		var fv = FontVariation.new()
+		fv.base_font = load("res://ui/Cinzel.ttf")
+		fv.variation_opentype = {"wght": 700}
+		title_font = fv
 	for k in ["atk", "s1", "s2", "pot", "mnt"]:
 		var path = "res://ui/" + k + ".svg"
 		if ResourceLoader.exists(path):
@@ -123,8 +130,10 @@ func build_start() -> void:
 	var r = full_panel(0.55)
 	start_panel = r[0]
 	var vb = r[1]
-	vb.add_child(mk_label("Cielo Roto", 96, GOLD))
-	vb.add_child(mk_label("Piedras ardientes caen del cielo y enloquecen a las bestias.\nElige reino, empuña tu arma y rómpelas.", 24, PAPER))
+	var title = mk_label("CIELO ROTO", 104, GOLD)
+	title.add_theme_font_override("font", title_font)
+	vb.add_child(title)
+	vb.add_child(mk_label("El cielo se ha roto. Piedras malditas caen sobre los reinos y despiertan a los muertos.\nElige reino, empuña tu arma y destrúyelas.", 24, PAPER))
 	vb.add_child(mk_label("REINO", 18, DIM))
 	var hr = row()
 	vb.add_child(hr)
@@ -192,7 +201,9 @@ func build_smith() -> void:
 	smith_panel = r[0]
 	smith_panel.visible = false
 	var vb = r[1]
-	vb.add_child(mk_label("Forja del herrero", 44, GOLD))
+	var st = mk_label("Forja del herrero", 46, GOLD)
+	st.add_theme_font_override("font", title_font)
+	vb.add_child(st)
 	vb.add_child(mk_label("Cada mejora gasta oro y un fragmento de piedra.\nDesde +4, si falla, la pieza baja un nivel.", 20, DIM))
 	lbl_w = mk_label("", 24, PAPER)
 	btn_w = mk_button("Mejorar arma", 24, Vector2(300, 60), true)
@@ -468,7 +479,7 @@ func _draw() -> void:
 	round_btn("pot", b["pot"][0], b["pot"][1], "Poción ×" + str(s["pots"]), GOLD, LACQ, game.pot_t / 4.0, 16)
 	round_btn("s2", b["s2"][0], b["s2"][1], C["s2"]["n"], JADE, LACQ, game.cd2 / C["s2"]["cd"], 20)
 	round_btn("s1", b["s1"][0], b["s1"][1], C["s1"]["n"], JADE, LACQ, game.cd1 / C["s1"]["cd"], 20)
-	round_btn("atk", b["atk"][0], b["atk"][1], "Atacar", BLOOD, Color(0.47, 0.12, 0.1, 0.8), 0.0, 26)
+	round_btn("atk", b["atk"][0], b["atk"][1], "Atacar", BLOOD, Color(0.32, 0.06, 0.05, 0.88), 0.0, 26)
 	if game.near_smith():
 		var sr = smith_rect()
 		draw_rect(sr, GOLD)
@@ -488,5 +499,7 @@ func _draw() -> void:
 		ty += 44.0
 	if banner_t > 0.0:
 		var ba = clamp(banner_t / 0.7, 0.0, 1.0)
-		ctxt(w / 2.0, h * 0.36, banner_h, 60, Color(GOLD.r, GOLD.g, GOLD.b, ba))
+		var bc = Color(GOLD.r, GOLD.g, GOLD.b, ba)
+		draw_string(title_font, Vector2(w / 2.0 - 598.0, h * 0.36 + 3.0), banner_h, HORIZONTAL_ALIGNMENT_CENTER, 1200.0, 58, Color(0, 0, 0, 0.9 * ba))
+		draw_string(title_font, Vector2(w / 2.0 - 600.0, h * 0.36), banner_h, HORIZONTAL_ALIGNMENT_CENTER, 1200.0, 58, bc)
 		ctxt(w / 2.0, h * 0.36 + 44.0, banner_p, 26, Color(PAPER.r, PAPER.g, PAPER.b, ba))
