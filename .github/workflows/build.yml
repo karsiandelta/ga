@@ -83,8 +83,10 @@ jobs:
 
       - name: Render real con capturas (comprueba shaders)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb mesa-vulkan-drivers libvulkan1 > /dev/null
+          for i in 1 2 3 4; do
+            sudo apt-get update -qq && sudo apt-get install -y -qq xvfb mesa-vulkan-drivers libvulkan1 > /dev/null && break
+            sleep 20
+          done
           mkdir -p shots
           CR_TEST=guerrero CR_SHOTS=$PWD/shots timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot-bin/godot --rendering-method mobile --resolution 1280x720 --fixed-fps 30 2>&1 | tee render.log | grep -E "ERROR|WARNING|Vulkan|OpenGL|CR_TEST|at:" | head -80 || true
           ls -la shots
