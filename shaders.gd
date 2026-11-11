@@ -34,7 +34,7 @@ void fragment() {
 	vec3 grass = mix(vec3(0.07, 0.16, 0.04), vec3(0.16, 0.24, 0.05), n1) * (0.75 + 0.5 * n2);
 	vec3 dry = vec3(0.30, 0.24, 0.08) * (0.75 + 0.5 * n2);
 	grass = mix(grass, dry, smoothstep(170.0, 270.0, dist) * 0.7);
-	vec3 dirt = vec3(0.17, 0.14, 0.11) * (0.8 + 0.25 * n3) * (0.85 + 0.3 * n1);
+	vec3 dirt = vec3(0.27, 0.215, 0.15) * (0.8 + 0.25 * n3) * (0.85 + 0.3 * n1);
 	vec3 rock = vec3(0.20, 0.19, 0.18) * (0.6 + 0.8 * n2) * (0.8 + 0.4 * n3);
 	vec3 sand = vec3(0.42, 0.36, 0.22) * (0.8 + 0.3 * n3);
 	float slope = 1.0 - normalize(wn).y;
