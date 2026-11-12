@@ -6,5 +6,6 @@ Ciudad 3D estilo simulador de vida, hecha con Godot 4.3. Todo (edificios, person
 - Supermercado, cafetería, tienda de muebles y gimnasio, todos visitables
 - Vecinos paseando, tráfico, ciclo de día y noche
 - Necesidades, dinero, trabajos por turnos y muebles para Casa Mirasol
+- Modo tipo GTA: robar y conducir coches, estrellas de búsqueda, persecuciones de policía y misiones
 
 La APK se compila sola con cada cambio en la rama `mirasol-ciudad` y se publica en *Releases*.

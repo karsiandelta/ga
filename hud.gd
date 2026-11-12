@@ -10,6 +10,7 @@ const ICONS := {
 	"energia": "<circle cx='12' cy='12' r='11' fill='#f2b61f'/><path d='M13.5 4 7 13.2h4.2L10 20l6.8-9.4h-4.3z' fill='#fff'/>",
 	"diversion": "<circle cx='12' cy='12' r='11' fill='#b061d6'/><circle cx='8.6' cy='10' r='1.4' fill='#fff'/><circle cx='15.4' cy='10' r='1.4' fill='#fff'/><path d='M7 13.5a5 5 0 0 0 10 0z' fill='#fff'/>",
 	"social": "<circle cx='12' cy='12' r='11' fill='#2f9bd8'/><path d='M6 7.5h12a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5.2L9 18.8v-3.3H6A1.5 1.5 0 0 1 4.5 14V9A1.5 1.5 0 0 1 6 7.5z' fill='#fff'/>",
+	"estrella": "<path d='M12 1.8l3.1 6.6 7.1.9-5.2 5 1.3 7.1L12 17.9 5.7 21.4 7 14.3l-5.2-5 7.1-.9z' fill='#ffd21f' stroke='#5a3c00' stroke-width='1.2'/>",
 	"dinero": "<path d='M12 1 20 12 12 23 4 12z' fill='#35d96a' stroke='#fff' stroke-width='1.4'/><path d='M12 1 12 23M4 12h16' stroke='#fff' stroke-width='.8' opacity='.7'/>",
 	"reloj": "<circle cx='12' cy='12' r='10' fill='#fff' stroke='#34415a' stroke-width='2'/><path d='M12 6v6l4 2.5' stroke='#34415a' stroke-width='2' fill='none' stroke-linecap='round'/>",
 }
@@ -18,6 +19,7 @@ const LOGO := "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 120' wid
 signal action_pressed
 signal play_pressed
 signal zoom_pressed(dir: float)
+signal punch_pressed
 
 const NEED_NAMES := {"hambre": "Hambre", "energia": "Energía", "diversion": "Diversión", "social": "Social"}
 
@@ -35,6 +37,10 @@ var joy: Joy
 var mini: Mini
 var game_ui: Control
 var toast_t := 0.0
+var stars: Array = []
+var speed_l: Label
+var mission_l: Label
+var punch_b: Button
 
 
 class Joy extends Control:
@@ -52,6 +58,7 @@ class Joy extends Control:
 class Mini extends Control:
 	var ppos := Vector3.ZERO
 	var yaw := 0.0
+	var dots: Array = []
 
 	func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.16, 0.17, 0.2, 0.85))
@@ -72,6 +79,12 @@ class Mini extends Control:
 				elif t != "R":
 					col = Color(0.85, 0.45, 0.4)
 				draw_rect(Rect2((c.x - 22.0 + 156.0) * sc, (c.z - 22.0 + 156.0) * sc, 44.0 * sc, 44.0 * sc), col)
+		for dt in dots:
+			var dp: Vector3 = dt[0]
+			var dc: Color = dt[1]
+			var q := Vector2((clampf(dp.x, -156, 156) + 156.0) * sc, (clampf(dp.z, -156, 156) + 156.0) * sc)
+			draw_circle(q, 6.0, Color(0, 0, 0, 0.7))
+			draw_circle(q, 4.5, dc)
 		var p := Vector2((clampf(ppos.x, -156, 156) + 156.0) * sc, (clampf(ppos.z, -156, 156) + 156.0) * sc)
 		var f := Vector2(sin(yaw), cos(yaw))
 		var r := Vector2(f.y, -f.x)
@@ -202,6 +215,38 @@ func _ready() -> void:
 	place_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	game_ui.add_child(place_l)
 
+	mission_l = _label("", 24, Color(1.0, 0.88, 0.25))
+	mission_l.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	mission_l.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	mission_l.position.y = 50
+	mission_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	game_ui.add_child(mission_l)
+
+	speed_l = _label("", 34)
+	speed_l.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	speed_l.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	speed_l.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	speed_l.position.y = -64
+	speed_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	speed_l.visible = false
+	game_ui.add_child(speed_l)
+
+	var sbox := HBoxContainer.new()
+	sbox.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	sbox.offset_left = -176
+	sbox.offset_top = 180
+	sbox.offset_right = -18
+	sbox.offset_bottom = 210
+	sbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	sbox.add_theme_constant_override("separation", 2)
+	sbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	game_ui.add_child(sbox)
+	for k in 5:
+		var st := _icon("estrella", 28)
+		st.modulate = Color(1, 1, 1, 0.16)
+		sbox.add_child(st)
+		stars.append(st)
+
 	toast_l = _label("", 23)
 	toast_l.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	toast_l.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -209,7 +254,7 @@ func _ready() -> void:
 	toast_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	toast_l.offset_left = -310
 	toast_l.offset_right = 310
-	toast_l.offset_top = 58
+	toast_l.offset_top = 92
 	toast_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast_l.add_theme_stylebox_override("normal", _sb(Color(0.05, 0.06, 0.1, 0.78), 16, 14))
 	toast_l.visible = false
@@ -233,6 +278,15 @@ func _ready() -> void:
 	action_b.visible = false
 	action_b.pressed.connect(func(): action_pressed.emit())
 	game_ui.add_child(action_b)
+
+	punch_b = _button("Golpear", 24, Color(0.75, 0.24, 0.2, 0.95))
+	punch_b.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	punch_b.offset_left = -200
+	punch_b.offset_top = -256
+	punch_b.offset_right = -36
+	punch_b.offset_bottom = -172
+	punch_b.pressed.connect(func(): punch_pressed.emit())
+	game_ui.add_child(punch_b)
 
 	var zi := _button("+", 34, Color(0.1, 0.12, 0.16, 0.75))
 	zi.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
@@ -276,7 +330,7 @@ func _ready() -> void:
 	t1.add_theme_constant_override("outline_size", 16)
 	t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tv.add_child(t1)
-	var t2 := _label("Tu barrio, tus vecinos, tu vida", 30)
+	var t2 := _label("Roba, conduce y que no te pillen", 30)
 	t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tv.add_child(t2)
 	var sp := Control.new()
@@ -312,6 +366,22 @@ func set_needs(d: Dictionary) -> void:
 			fill.bg_color = Color(0.95, 0.75, 0.2)
 		else:
 			fill.bg_color = Color(0.92, 0.3, 0.25)
+
+
+func set_wanted(n: int) -> void:
+	var blink := n > 0 and (Time.get_ticks_msec() / 400) % 2 == 0
+	for k in stars.size():
+		var st: TextureRect = stars[k]
+		if k < n:
+			st.modulate = Color(1, 1, 1, 1) if not blink else Color(1.0, 0.75, 0.75, 1)
+		else:
+			st.modulate = Color(1, 1, 1, 0.16)
+
+
+func set_drive(on: bool, kmh: int) -> void:
+	speed_l.visible = on
+	if on:
+		speed_l.text = "%d km/h" % kmh
 
 
 func set_action(text: String) -> void:

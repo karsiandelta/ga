@@ -80,7 +80,7 @@ jobs:
         run: |
           mkdir -p shots && touch shots/.gdignore
           which xvfb-run || (sudo apt-get update -qq; sudo apt-get install -y -qq xvfb > /dev/null) || true
-          CM_TEST=1 CM_SHOTS=$PWD/shots LIBGL_ALWAYS_SOFTWARE=1 timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot-bin/godot --resolution 1280x720 --fixed-fps 30 > render.log 2>&1 || true
+          CM_TEST=1 CM_SHOTS=$PWD/shots LIBGL_ALWAYS_SOFTWARE=1 timeout 1700 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot-bin/godot --resolution 1280x720 --fixed-fps 30 > render.log 2>&1 || true
           grep -E "ERROR|WARNING|OpenGL|CM_" render.log | head -40 || true
           ls -la shots
           if grep -qE "SHADER ERROR|SCRIPT ERROR|Shader compilation failed" render.log; then echo "::error::Errores de render"; exit 1; fi

@@ -59,6 +59,24 @@ var warn_t := 20.0
 var title_a := 0.0
 var rng := RandomNumberGenerator.new()
 var test_cam := false
+# --- modo GTA
+var driving: Dictionary = {}
+var wanted := 0
+var evade_t := 0.0
+var bust_t := 0.0
+var pol_t := 0.0
+var pol_near := 1e9
+var police: Array = []
+var punch_t := 0.0
+var crash_cd := 0.0
+var mission: Dictionary = {}
+var mission_cd := 0.0
+var mission_n := 0
+var beacon: MeshInstance3D
+var m_markers: Array = []
+var traffic_t := 0.0
+var ai_made := 0
+var smoke: CPUParticles3D
 var shots_dir := ""
 
 
@@ -79,6 +97,8 @@ func _ready() -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.action_pressed.connect(_do_action)
+	hud.punch_pressed.connect(_punch)
+	_setup_gta()
 	hud.play_pressed.connect(_on_play)
 	hud.zoom_pressed.connect(func(dir): cam_dist = clampf(cam_dist + dir * 2.5, 4.5, 26.0))
 	_load()
@@ -169,7 +189,7 @@ func _spawn_npcs() -> void:
 		var off := Vector3(rng.randf_range(-0.55, 0.55), 0, rng.randf_range(-0.55, 0.55))
 		var a := _wp(cur[0], cur[1], cur[2])
 		var b := _wp(nxt[0], nxt[1], nxt[2])
-		var d := {"node": node, "name": _rand_name(female), "pos": a.lerp(b, rng.randf()) + off, "prev": cur, "cur": nxt, "off": off, "speed": rng.randf_range(1.2, 1.9), "phase": rng.randf() * TAU, "wait": 0.0, "yaw": 0.0, "idle": false, "amt": 1.0}
+		var d := {"node": node, "name": _rand_name(female), "pos": a.lerp(b, rng.randf()) + off, "prev": cur, "cur": nxt, "off": off, "speed": rng.randf_range(1.2, 1.9), "phase": rng.randf() * TAU, "wait": 0.0, "yaw": 0.0, "idle": false, "amt": 1.0, "down": 0.0}
 		npcs.append(d)
 	# gente parada en la plaza y el parque
 	var spots: Array = []
@@ -190,7 +210,7 @@ func _spawn_npcs() -> void:
 		var yaw := atan2(look.x - p.x, look.z - p.z)
 		node.position = p
 		node.rotation.y = yaw
-		npcs.append({"node": node, "name": _rand_name(female), "pos": p, "prev": [], "cur": [], "off": Vector3.ZERO, "speed": 0.0, "phase": rng.randf() * TAU, "wait": 0.0, "yaw": yaw, "idle": true, "amt": 0.0})
+		npcs.append({"node": node, "name": _rand_name(female), "pos": p, "prev": [], "cur": [], "off": Vector3.ZERO, "speed": 0.0, "phase": rng.randf() * TAU, "wait": 0.0, "yaw": yaw, "idle": true, "amt": 0.0, "down": 0.0})
 
 
 func _update_npcs(dt: float) -> void:
@@ -198,6 +218,16 @@ func _update_npcs(dt: float) -> void:
 		var node: Node3D = n.node
 		var pos: Vector3 = n.pos
 		var near := pos.distance_squared_to(ppos) < 90.0 * 90.0
+		if n.down > 0.0:
+			n.down -= dt
+			node.rotation.x = lerpf(node.rotation.x, -1.45, minf(1.0, dt * 10.0))
+			node.position = pos + Vector3(0, 0.22, 0)
+			if n.down <= 0.0:
+				node.rotation.x = 0.0
+				node.position = pos
+				if not n.idle:
+					n.speed = 3.3
+			continue
 		if n.idle:
 			if near:
 				n.phase += dt * 1.5
@@ -267,38 +297,74 @@ func _valid(a: Vector2i) -> bool:
 	return a.x >= 0 and a.x <= World.N and a.y >= 0 and a.y <= World.N
 
 
-func _spawn_cars() -> void:
-	var used: Dictionary = {}
+func _new_car(kind: int, col: Color, p: Vector3, yaw: float, mode: String) -> Dictionary:
+	var node := Actors.car(W.mat_solid, W.mat_glow, col, kind)
+	add_child(node)
+	node.position = p
+	node.rotation.y = yaw
+	var top := rng.randf_range(15.0, 18.0)
+	if kind == 2:
+		top = 11.0
+	var c := {"node": node, "pos": p, "b": Vector2i.ZERO, "d": Vector2i(0, 1), "pts": [], "speed": 0.0, "max": 6.5 if kind == 2 else rng.randf_range(7.5, 10.0), "yaw": yaw, "stuck": 0.0, "free": 0.0, "len": 5.5 if kind == 2 else 3.0, "mode": mode, "kind": kind, "hp": 100.0, "r": 2.3 if kind == 2 else 1.5, "top": top, "tgt": Vector3.ZERO, "has_tgt": false, "temp": false}
+	cars.append(c)
+	return c
+
+
+func _spawn_ai(min_dist: float) -> bool:
 	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
-	var made := 0
-	var tries := 0
-	while made < 18 and tries < 500:
-		tries += 1
+	for tries in 40:
 		var a := Vector2i(rng.randi() % (World.N + 1), rng.randi() % (World.N + 1))
 		var d: Vector2i = dirs[rng.randi() % 4]
 		var b := a + d
-		var key := "%d,%d,%d,%d" % [a.x, a.y, d.x, d.y]
-		if not _valid(b) or used.has(key):
+		if not _valid(b):
 			continue
-		used[key] = true
+		var p := _lane_start(a, d).lerp(_lane_end(b, d), rng.randf_range(0.2, 0.8))
+		if p.distance_to(ppos) < min_dist:
+			continue
+		var free := true
+		for o in cars:
+			var op: Vector3 = o.pos
+			if op.distance_to(p) < 16.0:
+				free = false
+				break
+		if not free:
+			continue
+		ai_made += 1
 		var kind := 0
-		if made % 9 == 4:
+		if ai_made % 9 == 5:
 			kind = 2
-		elif made % 5 == 2:
+		elif ai_made % 5 == 3:
 			kind = 1
 		var col: Color = Actors.CAR_COLS[rng.randi() % Actors.CAR_COLS.size()]
 		if kind == 1:
 			col = Color(0.98, 0.8, 0.1)
 		elif kind == 2:
 			col = Color(0.85, 0.25, 0.2)
-		var node := Actors.car(W.mat_solid, W.mat_glow, col, kind)
-		add_child(node)
-		var p := _lane_start(a, d).lerp(_lane_end(b, d), rng.randf_range(0.2, 0.8))
-		var yaw := atan2(float(d.x), float(d.y))
-		node.position = p
-		node.rotation.y = yaw
-		cars.append({"node": node, "pos": p, "b": b, "d": d, "pts": [_lane_end(b, d)], "speed": 0.0, "max": 6.5 if kind == 2 else rng.randf_range(7.5, 10.0), "yaw": yaw, "stuck": 0.0, "free": 0.0, "len": 5.5 if kind == 2 else 3.0})
-		made += 1
+		var c := _new_car(kind, col, p, atan2(float(d.x), float(d.y)), "ai")
+		c.b = b
+		c.d = d
+		c.pts = [_lane_end(b, d)]
+		return true
+	return false
+
+
+func _spawn_cars() -> void:
+	for k in 18:
+		_spawn_ai(0.0)
+	var park: Array = []
+	for bl in [[1, 1], [2, 1], [1, 2], [3, 2]]:
+		var c := World.block_center(bl[0], bl[1])
+		park.append([c + Vector3(17, 0.16, 13), 0.0])
+		park.append([c + Vector3(-17, 0.16, 13), 0.0])
+	for j in World.N:
+		for i in World.N:
+			if World.LAYOUT[j][i] == "A":
+				park.append([World.block_center(i, j) + Vector3(0, 0.16, 10), PI / 2.0])
+	park.append([World.block_center(1, 4) + Vector3(-5.5, 0.16, 17.5), 0.0])
+	for pk in park:
+		var pp: Vector3 = pk[0]
+		var py: float = pk[1]
+		_new_car(0, Actors.CAR_COLS[rng.randi() % Actors.CAR_COLS.size()], pp, py, "parked")
 
 
 func _car_next(c: Dictionary) -> void:
@@ -330,13 +396,15 @@ func _car_next(c: Dictionary) -> void:
 
 func _update_cars(dt: float) -> void:
 	for c in cars:
+		if c.mode != "ai":
+			continue
 		var pos: Vector3 = c.pos
 		var fwd := Vector3(sin(c.yaw), 0, cos(c.yaw))
 		var blocked := false
 		var reach: float = 5.0 + c.len + c.speed * 0.5
 		if c.free <= 0.0:
 			for o in cars:
-				if o == c:
+				if is_same(o, c):
 					continue
 				var dv: Vector3 = o.pos - pos
 				var along := dv.dot(fwd)
@@ -347,7 +415,7 @@ func _update_cars(dt: float) -> void:
 			c.free -= dt
 		if not blocked:
 			var ped_reach: float = 3.5 + c.len + c.speed * 0.4
-			if inside == "":
+			if inside == "" and driving.is_empty():
 				var dp := ppos - pos
 				var al := dp.dot(fwd)
 				if al > 0.0 and al < ped_reach and absf(dp.x * fwd.z - dp.z * fwd.x) < 1.9:
@@ -496,12 +564,15 @@ func _move_player(dt: float) -> void:
 		jv.y += 1.0
 	if jv.length() > 1.0:
 		jv = jv.normalized()
+	if not driving.is_empty():
+		_drive(dt, jv)
+		return
 	var moving := false
 	if not busy and jv.length() > 0.12:
 		var fwd := -Vector3(sin(cam_yaw), 0, cos(cam_yaw))
 		var right := Vector3(cos(cam_yaw), 0, -sin(cam_yaw))
 		var mv := right * jv.x - fwd * jv.y
-		var speed := 4.8
+		var speed := 5.6
 		if needs.energia < 15.0 or needs.hambre < 15.0:
 			speed = 3.0
 		var np := ppos + mv * speed * dt
@@ -518,6 +589,10 @@ func _move_player(dt: float) -> void:
 	player.position = ppos
 	player.rotation.y = pyaw
 	Actors.animate(player, pphase, pwalk)
+	if punch_t > 0.0:
+		punch_t -= dt
+		var limbs: Array = player.get_meta("limbs")
+		limbs[3].rotation.x = -1.6 * clampf(punch_t / 0.12, 0.0, 1.0)
 	bob.rotation.y += dt * 1.6
 	bob.position.y = 2.05 + sin(Time.get_ticks_msec() * 0.003) * 0.05
 
@@ -616,7 +691,22 @@ func _update_action() -> void:
 				label = s.label
 				if s.id == "hablar" and W.statics[s.who].role == "host":
 					label = "Hablar con " + host_name
+	elif not driving.is_empty():
+		if absf(driving.speed) < 5.0:
+			best = {"type": "exit"}
+			label = "Salir del coche"
 	else:
+		for c in cars:
+			if c.mode != "ai" and c.mode != "parked":
+				continue
+			if absf(c.speed) > 4.5:
+				continue
+			var cp: Vector3 = c.pos
+			var cd: float = Vector2(cp.x - ppos.x, cp.z - ppos.z).length() - c.r
+			if cd < 1.7 and cd < bd:
+				bd = cd
+				best = {"type": "car", "car": c}
+				label = "Robar coche" if c.mode == "ai" else "Subir al coche"
 		for dr in W.doors:
 			var dp: Vector3 = dr.pos
 			var d := Vector2(dp.x - ppos.x, dp.z - ppos.z).length()
@@ -625,6 +715,8 @@ func _update_action() -> void:
 				best = {"type": "door", "door": dr}
 				label = "Entrar: " + dr.name
 		for n in npcs:
+			if n.down > 0.0:
+				continue
 			var np: Vector3 = n.pos
 			var d := Vector2(np.x - ppos.x, np.z - ppos.z).length()
 			if d < 2.6 and d < bd:
@@ -651,7 +743,16 @@ func _do_action() -> void:
 	if busy or not started or cur_action.is_empty():
 		return
 	var a := cur_action
+	if a.type == "car":
+		_enter_car(a.car)
+		return
+	if a.type == "exit":
+		_exit_car()
+		return
 	if a.type == "door":
+		if wanted > 0 and pol_near < 30.0:
+			hud.toast("¡La policía te está viendo! Aléjate antes de esconderte.")
+			return
 		_enter(a.door)
 	elif a.type == "npc":
 		var n: Dictionary = a.npc
@@ -834,7 +935,7 @@ func _on_play() -> void:
 	started = true
 	cam_snap = true
 	hud.start_game()
-	hud.toast("Bienvenido a Ciudad Mirasol. Explora, entra en las tiendas y saluda a tus vecinos.")
+	hud.toast("Bienvenido a Ciudad Mirasol. Roba un coche, busca los puntos de MISIÓN y que no te pille la policía.")
 
 
 func _process(dt: float) -> void:
@@ -855,10 +956,27 @@ func _process(dt: float) -> void:
 	if inside == "":
 		_update_npcs(dt)
 		_update_cars(dt)
+	crash_cd = maxf(0.0, crash_cd - dt)
+	_update_police(dt)
+	_update_mission(dt)
+	_tick_traffic(dt)
 	_update_camera(dt)
 	_update_action()
 	_update_needs(dt)
 	hud.set_needs(needs)
+	hud.set_wanted(wanted)
+	var in_car := not driving.is_empty()
+	hud.set_drive(in_car, int(absf(driving.speed) * 5.0) if in_car else 0)
+	hud.punch_b.visible = not in_car and inside == ""
+	var dots: Array = []
+	if mission.is_empty():
+		for mp in m_markers:
+			dots.append([mp, Color(0.4, 0.95, 1.0)])
+	elif mission.type != "huida":
+		dots.append([mission.pts[mission.stage], Color(1.0, 0.85, 0.1)])
+	for pc2 in police:
+		dots.append([pc2.pos, Color(0.25, 0.45, 1.0) if (Time.get_ticks_msec() / 300) % 2 == 0 else Color(1.0, 0.2, 0.2)])
+	hud.mini.dots = dots
 	hud.money_l.text = "§ %d" % money
 	hud.clock_l.text = _clock_text()
 	hud.place_l.text = _place()
@@ -868,6 +986,557 @@ func _process(dt: float) -> void:
 	if save_t > 30.0:
 		save_t = 0.0
 		_save()
+
+
+# ---------------------------------------------------------------- modo GTA
+
+func _setup_gta() -> void:
+	var bm := StandardMaterial3D.new()
+	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bm.albedo_color = Color(1.0, 0.85, 0.1, 0.38)
+	bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var cm := CylinderMesh.new()
+	cm.top_radius = 2.6
+	cm.bottom_radius = 2.6
+	cm.height = 16.0
+	cm.radial_segments = 20
+	cm.cap_top = false
+	cm.cap_bottom = false
+	cm.material = bm
+	beacon = MeshInstance3D.new()
+	beacon.mesh = cm
+	beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	beacon.visible = false
+	add_child(beacon)
+	var mm := StandardMaterial3D.new()
+	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mm.albedo_color = Color(0.3, 0.9, 1.0, 0.45)
+	mm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mk := CylinderMesh.new()
+	mk.top_radius = 1.5
+	mk.bottom_radius = 1.5
+	mk.height = 2.4
+	mk.radial_segments = 18
+	mk.cap_top = false
+	mk.cap_bottom = false
+	mk.material = mm
+	var pts: Array = [World.block_center(2, 2) + Vector3(-6, 0, 16), World.block_center(1, 1) + Vector3(-6, 0, 13), W.spawn + Vector3(5, 0, 0)]
+	for p in pts:
+		var q: Vector3 = p
+		var mi := MeshInstance3D.new()
+		mi.mesh = mk
+		mi.position = q + Vector3(0, 1.3, 0)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		W._label("MISIÓN", q + Vector3(0, 3.3, 0), 0.01, Color(0.5, 0.95, 1.0), true)
+		m_markers.append(q)
+	var sm := StandardMaterial3D.new()
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sm.albedo_color = Color(0.2, 0.2, 0.22, 0.55)
+	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var sph := SphereMesh.new()
+	sph.radius = 0.3
+	sph.height = 0.6
+	sph.radial_segments = 8
+	sph.rings = 4
+	sph.material = sm
+	smoke = CPUParticles3D.new()
+	smoke.mesh = sph
+	smoke.amount = 20
+	smoke.lifetime = 1.3
+	smoke.local_coords = false
+	smoke.direction = Vector3.UP
+	smoke.spread = 25.0
+	smoke.gravity = Vector3(0, 1.2, 0)
+	smoke.initial_velocity_min = 1.0
+	smoke.initial_velocity_max = 2.2
+	smoke.scale_amount_min = 0.6
+	smoke.scale_amount_max = 1.8
+	smoke.emitting = false
+	add_child(smoke)
+
+
+func _crime(cap: int) -> void:
+	if wanted < cap:
+		wanted += 1
+		if wanted == 1:
+			hud.toast("¡Te busca la policía! Huye lejos o escóndete en un edificio.")
+	evade_t = 0.0
+
+
+func _knock(n: Dictionary, t: float) -> void:
+	n.down = t
+	n.wait = 0.0
+
+
+func _punch() -> void:
+	if busy or not started or inside != "" or not driving.is_empty() or punch_t > 0.0:
+		return
+	punch_t = 0.35
+	var f := Vector3(sin(pyaw), 0, cos(pyaw))
+	for n in npcs:
+		if n.down > 0.0:
+			continue
+		var dn: Vector3 = n.pos - ppos
+		dn.y = 0.0
+		var d := dn.length()
+		if d < 1.9 and (d < 0.6 or dn.dot(f) / d > 0.2):
+			_knock(n, 5.0)
+			var loot := rng.randi_range(5, 30)
+			money += loot
+			hud.toast("¡Zas! %s suelta §%d" % [n.name, loot])
+			_crime(2)
+			break
+
+
+func _eject_driver(c: Dictionary) -> void:
+	if npcs.size() >= 60:
+		return
+	var cpos: Vector3 = c.pos
+	var yaw: float = c.yaw
+	var female := rng.randf() < 0.5
+	var node := Actors.random_person(W.mat_solid, rng)
+	add_child(node)
+	var p := cpos - Vector3(cos(yaw), 0, -sin(yaw)) * 2.3
+	var i := clampi(int(floor((p.x - World.X0 + 7.0) / World.P)), 0, World.N - 1)
+	var j := clampi(int(floor((p.z - World.X0 + 7.0) / World.P)), 0, World.N - 1)
+	var bk := 0
+	var bd := 1e18
+	for k in 4:
+		var dd := _wp(i, j, k).distance_squared_to(p)
+		if dd < bd:
+			bd = dd
+			bk = k
+	node.position = p
+	npcs.append({"node": node, "name": _rand_name(female), "pos": p, "prev": [], "cur": [i, j, bk], "off": Vector3.ZERO, "speed": 3.3, "phase": 0.0, "wait": 0.0, "yaw": yaw, "idle": false, "amt": 1.0, "down": 0.0})
+
+
+func _enter_car(c: Dictionary) -> void:
+	if c.mode == "ai":
+		_eject_driver(c)
+		_crime(2)
+		c.temp = true
+		hud.toast("¡Coche robado!")
+	c.mode = "player"
+	c.pts = []
+	driving = c
+	player.visible = false
+	cam_dist = 9.0
+	cam_pitch = 0.3
+	if float(c.hp) <= 0.0:
+		hud.toast("Este coche está destrozado. Busca otro.")
+
+
+func _exit_car() -> void:
+	if driving.is_empty():
+		return
+	var c := driving
+	var cpos: Vector3 = c.pos
+	var yaw: float = c.yaw
+	c.mode = "parked"
+	c.speed = 0.0
+	var node: Node3D = c.node
+	node.rotation.z = 0.0
+	driving = {}
+	ppos = _collide(cpos + Vector3(cos(yaw), 0, -sin(yaw)) * (float(c.r) + 0.8), 0.42)
+	pyaw = yaw
+	player.visible = true
+	smoke.emitting = false
+	cam_dist = 10.0
+	cam_pitch = 0.45
+
+
+func _crash(c: Dictionary, impact: float) -> void:
+	crash_cd = 0.4
+	var was: float = c.hp
+	c.hp = maxf(0.0, was - impact * 1.5)
+	if was > 0.0 and float(c.hp) <= 0.0 and is_same(c, driving):
+		hud.toast("El coche está destrozado. ¡Sal y busca otro!")
+
+
+func _drive(dt: float, jv: Vector2) -> void:
+	var c := driving
+	var top: float = c.top
+	var sp: float = c.speed
+	var r: float = c.r
+	var yaw: float = c.yaw
+	var thr := -jv.y
+	if busy or float(c.hp) <= 0.0:
+		thr = 0.0
+		sp = move_toward(sp, 0.0, 12.0 * dt)
+	if thr > 0.1:
+		if sp < 0.0:
+			sp += 20.0 * thr * dt
+		else:
+			sp += 9.5 * thr * dt * (1.0 - 0.55 * sp / top)
+	elif thr < -0.1:
+		if sp > 0.5:
+			sp += 22.0 * thr * dt
+		else:
+			sp += 6.0 * thr * dt
+	else:
+		sp = move_toward(sp, 0.0, 3.5 * dt)
+	sp = clampf(sp, -6.0, top)
+	var grip := clampf(absf(sp) / 4.0, 0.0, 1.0)
+	var steer := jv.x * 2.2 * grip * (1.0 - 0.45 * clampf(absf(sp) / top, 0.0, 1.0)) * signf(sp)
+	yaw -= steer * dt
+	var fwd := Vector3(sin(yaw), 0, cos(yaw))
+	var cpos: Vector3 = c.pos
+	var np := cpos + fwd * sp * dt
+	var cp := _collide(np, r)
+	cp.x = clampf(cp.x, -158.0, 158.0)
+	cp.z = clampf(cp.z, -158.0, 158.0)
+	var push := cp - np
+	push.y = 0.0
+	if push.length() > 0.0008:
+		var head := clampf(push.normalized().dot(-fwd * signf(sp)), 0.0, 1.0)
+		if head > 0.45 and absf(sp) > 6.0 and crash_cd <= 0.0:
+			_crash(c, absf(sp))
+		sp *= 1.0 - head * minf(1.0, dt * 14.0)
+	for o in cars:
+		if is_same(o, c):
+			continue
+		var dv: Vector3 = cp - o.pos
+		dv.y = 0.0
+		var rr: float = r + o.r - 0.3
+		var d := dv.length()
+		if d < rr and d > 0.01:
+			var out := dv / d * (rr - d)
+			if o.mode == "parked":
+				cp += out * 0.5
+				o.pos = _collide(o.pos - out * 0.5, o.r)
+				var on: Node3D = o.node
+				on.position = o.pos
+			else:
+				cp += out
+			var rel := absf(sp)
+			if rel > 5.0 and crash_cd <= 0.0:
+				_crash(c, rel * 0.8)
+				if o.mode == "police":
+					_crime(4)
+				elif o.mode == "ai":
+					o.speed = 0.0
+			sp *= 1.0 - minf(1.0, dt * 8.0)
+	if absf(sp) > 3.5:
+		for n in npcs:
+			if n.down > 0.0:
+				continue
+			var dn: Vector3 = n.pos - cp
+			if absf(dn.x) > 3.2 or absf(dn.z) > 3.2:
+				continue
+			dn.y = 0.0
+			if dn.length() < r + 0.3:
+				_knock(n, 6.0)
+				_crime(3)
+				sp *= 0.85
+	cp.y = lerpf(cpos.y, World.ground_y(cp.x, cp.z), minf(1.0, dt * 12.0))
+	c.pos = cp
+	c.speed = sp
+	c.yaw = yaw
+	var node: Node3D = c.node
+	node.position = cp
+	node.rotation.y = yaw
+	node.rotation.z = lerpf(node.rotation.z, steer * absf(sp) * 0.004, minf(1.0, dt * 8.0))
+	ppos = cp
+	pyaw = yaw
+	player.position = cp
+	if cam_id == -1:
+		cam_yaw = lerp_angle(cam_yaw, yaw + PI, minf(1.0, dt * 3.2))
+	smoke.emitting = float(c.hp) < 35.0
+	smoke.position = cp + fwd * 1.7 + Vector3(0, 0.9, 0)
+
+
+func _clear_police() -> void:
+	for c in police:
+		var node: Node3D = c.node
+		node.queue_free()
+		for k in cars.size():
+			if is_same(cars[k], c):
+				cars.remove_at(k)
+				break
+	police.clear()
+	pol_near = 1e9
+
+
+func _spawn_police() -> void:
+	var best := Vector2i(0, 0)
+	var found := false
+	for tries in 40:
+		var a := Vector2i(rng.randi() % (World.N + 1), rng.randi() % (World.N + 1))
+		var d := _node_pos(a).distance_to(ppos)
+		if d > 55.0 and d < 125.0:
+			best = a
+			found = true
+			break
+	if not found:
+		var far := -1.0
+		for i in World.N + 1:
+			for j in World.N + 1:
+				var d2 := _node_pos(Vector2i(i, j)).distance_to(ppos)
+				if d2 > far:
+					far = d2
+					best = Vector2i(i, j)
+	var p := _node_pos(best)
+	var c := _new_car(3, Color(0.95, 0.95, 0.97), p, atan2(ppos.x - p.x, ppos.z - p.z), "police")
+	police.append(c)
+
+
+func _police_step(c: Dictionary, dt: float) -> float:
+	var pos: Vector3 = c.pos
+	var to := ppos - pos
+	to.y = 0.0
+	var dist := to.length()
+	var yaw: float = c.yaw
+	if float(c.free) > 0.0:
+		c.free -= dt
+		yaw += 1.3 * dt
+		var fb := Vector3(sin(yaw), 0, cos(yaw))
+		pos = _collide(pos - fb * 4.0 * dt, 1.5)
+		c.speed = 0.0
+	else:
+		var goal := ppos
+		if dist >= 26.0:
+			var tg: Vector3 = c.tgt
+			if not c.has_tgt or Vector2(tg.x - pos.x, tg.z - pos.z).length() < 5.0:
+				var ni := clampi(roundi((pos.x - World.road_pos(0)) / World.P), 0, World.N)
+				var nj := clampi(roundi((pos.z - World.road_pos(0)) / World.P), 0, World.N)
+				var here := Vector2i(ni, nj)
+				var hp := _node_pos(here)
+				if Vector2(hp.x - pos.x, hp.z - pos.z).length() > 6.0:
+					tg = hp
+				else:
+					var bestd := 1e18
+					var steps: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+					for d2 in steps:
+						var nb := here + d2
+						if not _valid(nb):
+							continue
+						var npos := _node_pos(nb)
+						var dd := npos.distance_squared_to(ppos)
+						if dd < bestd:
+							bestd = dd
+							tg = npos
+				c.tgt = tg
+				c.has_tgt = true
+			goal = tg
+		else:
+			c.has_tgt = false
+		var des := atan2(goal.x - pos.x, goal.z - pos.z)
+		var dy := wrapf(des - yaw, -PI, PI)
+		yaw += clampf(dy, -2.8 * dt, 2.8 * dt)
+		var top := 11.5 + wanted * 1.0
+		var tsp := top * (1.0 - 0.65 * clampf(absf(dy) / 1.2, 0.0, 1.0))
+		if dist < 6.5:
+			tsp = 1.5 if dist > 3.6 else 0.0
+		var sp: float = move_toward(c.speed, tsp, 9.0 * dt)
+		var fwd := Vector3(sin(yaw), 0, cos(yaw))
+		var np2 := _collide(pos + fwd * sp * dt, 1.5)
+		for o in cars:
+			if is_same(o, c):
+				continue
+			var dv: Vector3 = np2 - o.pos
+			dv.y = 0.0
+			var rr: float = 1.2 + o.r
+			var dl := dv.length()
+			if dl < rr and dl > 0.01:
+				np2 += dv / dl * (rr - dl)
+				if is_same(o, driving) and sp > 6.0 and crash_cd <= 0.0:
+					_crash(o, sp * 0.5)
+					o.speed *= 0.7
+				sp = minf(sp, 3.0)
+		var moved := Vector2(np2.x - pos.x, np2.z - pos.z).length()
+		if tsp > 3.0 and moved < 1.0 * dt:
+			c.stuck += dt
+		else:
+			c.stuck = 0.0
+		if float(c.stuck) > 1.2:
+			c.stuck = 0.0
+			c.free = 1.0
+		pos = np2
+		c.speed = sp
+	pos.y = lerpf(pos.y, World.ground_y(pos.x, pos.z), minf(1.0, dt * 10.0))
+	c.pos = pos
+	c.yaw = yaw
+	var node: Node3D = c.node
+	node.position = pos
+	node.rotation.y = yaw
+	return dist
+
+
+func _update_police(dt: float) -> void:
+	if wanted <= 0:
+		if not police.is_empty():
+			_clear_police()
+		bust_t = 0.0
+		return
+	if inside != "":
+		pol_near = 1e9
+		evade_t += dt
+	else:
+		var counts: Array[int] = [0, 1, 2, 2, 3, 4]
+		pol_t -= dt
+		if police.size() < counts[wanted] and pol_t <= 0.0:
+			pol_t = 2.5
+			_spawn_police()
+		var near := 1e9
+		var blink := (Time.get_ticks_msec() / 220) % 2 == 0
+		for c in police:
+			near = minf(near, _police_step(c, dt))
+			var bar: Array = c.node.get_meta("bar")
+			bar[0].visible = blink
+			bar[1].visible = not blink
+		pol_near = near
+		if near > 55.0:
+			evade_t += dt
+		else:
+			evade_t = 0.0
+		var slow := driving.is_empty() or absf(driving.speed) < 3.0
+		if near < 5.2 and slow and not busy:
+			bust_t += dt
+		else:
+			bust_t = maxf(0.0, bust_t - dt * 0.5)
+		if bust_t > (1.0 if driving.is_empty() else 2.2):
+			_busted()
+			return
+	if evade_t > 10.0:
+		wanted = 0
+		evade_t = 0.0
+		_clear_police()
+		hud.toast("Has despistado a la policía.")
+
+
+func _busted() -> void:
+	if busy:
+		return
+	busy = true
+	bust_t = 0.0
+	var fine := mini(money, 80 + wanted * 40)
+	await hud.fade(1.0, 0.4)
+	money -= fine
+	wanted = 0
+	evade_t = 0.0
+	_clear_police()
+	if not driving.is_empty():
+		_exit_car()
+	if not mission.is_empty():
+		mission = {}
+		beacon.visible = false
+		mission_cd = 8.0
+	inside = ""
+	ppos = W.spawn
+	pyaw = 0.0
+	cam_yaw = 0.0
+	cam_snap = true
+	await hud.fade(0.0, 0.4)
+	busy = false
+	hud.toast("DETENIDO. La policía te ha puesto una multa de §%d." % fine)
+
+
+func _tick_traffic(dt: float) -> void:
+	traffic_t -= dt
+	if traffic_t > 0.0 or inside != "":
+		return
+	traffic_t = 3.0
+	var ai := 0
+	var k := cars.size() - 1
+	while k >= 0:
+		var c: Dictionary = cars[k]
+		if c.mode == "ai":
+			ai += 1
+		elif c.mode == "parked" and c.temp:
+			var cp: Vector3 = c.pos
+			if cp.distance_to(ppos) > 140.0:
+				var node: Node3D = c.node
+				node.queue_free()
+				cars.remove_at(k)
+		k -= 1
+	if ai < 16:
+		_spawn_ai(90.0)
+
+
+func _road_point(from: Vector3, min_d: float) -> Vector3:
+	var p := Vector3.ZERO
+	for tries in 40:
+		var k := rng.randi() % (World.N + 1)
+		var s := rng.randi() % World.N
+		var along := World.X0 + s * World.P + 22.0
+		if rng.randf() < 0.5:
+			p = Vector3(World.road_pos(k), 0, along)
+		else:
+			p = Vector3(along, 0, World.road_pos(k))
+		if p.distance_to(from) > min_d:
+			break
+	return p
+
+
+func _mission_start() -> void:
+	var kind := mission_n % 3
+	mission_n += 1
+	if kind == 0:
+		var t := _road_point(ppos, 90.0)
+		var d := t.distance_to(ppos)
+		mission = {"type": "reparto", "title": "Reparto exprés", "stage": 0, "pts": [t], "t": d / 6.0 + 30.0, "reward": 80 + int(d * 0.6), "hints": ["Lleva el paquete al punto amarillo antes de que acabe el tiempo."]}
+	elif kind == 1:
+		var p1 := _road_point(ppos, 60.0)
+		var p2 := _road_point(p1, 100.0)
+		var d := p1.distance_to(ppos) + p2.distance_to(p1)
+		mission = {"type": "taxi", "title": "Carrera de taxi", "stage": 0, "pts": [p1, p2], "t": d / 6.0 + 45.0, "reward": 120 + int(d * 0.5), "hints": ["Recoge al cliente en el punto amarillo.", "Cliente a bordo: llévalo a su destino."]}
+	else:
+		wanted = maxi(wanted, 3)
+		evade_t = 0.0
+		mission = {"type": "huida", "title": "La gran huida", "stage": 0, "pts": [], "t": 150.0, "reward": 250, "hints": ["Tienes 3 estrellas: despista a la policía o escóndete en un edificio."]}
+	hud.toast("MISIÓN: %s. %s" % [mission.title, mission.hints[0]])
+
+
+func _mission_end(ok: bool) -> void:
+	if ok:
+		var rw: int = mission.reward
+		money += rw
+		_add("diversion", 25.0)
+		hud.toast("¡MISIÓN SUPERADA!  +§%d" % rw)
+	else:
+		hud.toast("Misión fallida. Vuelve a un punto de MISIÓN para intentarlo otra vez.")
+	mission = {}
+	mission_cd = 6.0
+	beacon.visible = false
+	hud.mission_l.text = ""
+
+
+func _update_mission(dt: float) -> void:
+	if mission.is_empty():
+		hud.mission_l.text = ""
+		mission_cd -= dt
+		if mission_cd > 0.0 or inside != "" or busy:
+			return
+		for mp in m_markers:
+			var q: Vector3 = mp
+			if Vector2(q.x - ppos.x, q.z - ppos.z).length() < (3.6 if not driving.is_empty() else 2.4):
+				_mission_start()
+				break
+		return
+	mission.t -= dt
+	var secs := int(maxf(0.0, mission.t))
+	if float(mission.t) <= 0.0:
+		_mission_end(false)
+		return
+	if mission.type == "huida":
+		hud.mission_l.text = "%s · %d:%02d" % [mission.title, secs / 60, secs % 60]
+		if wanted == 0:
+			_mission_end(true)
+		return
+	var tgt: Vector3 = mission.pts[mission.stage]
+	beacon.visible = true
+	beacon.position = tgt + Vector3(0, 8.0, 0)
+	var dist := Vector2(tgt.x - ppos.x, tgt.z - ppos.z).length()
+	hud.mission_l.text = "%s · %d m · %d:%02d" % [mission.title, int(dist), secs / 60, secs % 60]
+	if inside == "" and dist < 5.5:
+		mission.stage += 1
+		if int(mission.stage) >= mission.pts.size():
+			_mission_end(true)
+		else:
+			hud.toast(mission.hints[mission.stage])
 
 
 # ---------------------------------------------------------------- guardado
@@ -907,6 +1576,13 @@ func _load() -> void:
 
 func _frames(n: int) -> void:
 	for i in n:
+		await get_tree().process_frame
+
+
+func _tick(i: int) -> void:
+	if shots_dir != "" and i % 8 != 0:
+		_process(1.0 / 30.0)
+	else:
 		await get_tree().process_frame
 
 
@@ -1011,8 +1687,109 @@ func _run_test() -> void:
 	await _enter(dr)
 	await _frames(3)
 	await _exit()
-	await _frames(200)
+	await _frames(60)
 	await _shot("11_final")
+	# --- modo GTA
+	mission = {}
+	time_h = 10.0
+	needs.energia = 90.0
+	needs.hambre = 90.0
+	mission_cd = 999.0
+	_tp(W.spawn, 0.0, 0.45, 10.0)
+	var pk: Dictionary = {}
+	for c in cars:
+		if c.mode == "parked" and (pk.is_empty() or c.pos.distance_to(ppos) < pk.pos.distance_to(ppos)):
+			pk = c
+	ppos = pk.pos + Vector3(0, 0, 2.6)
+	_update_action()
+	if cur_action.is_empty() or cur_action.type != "car":
+		print("CM_FALLO coche aparcado sin acción")
+	_enter_car(pk)
+	for step in 200:
+		joy_vec = Vector2(1.0 if step > 22 and step < 62 else 0.0, -1.0)
+		await _tick(step)
+	await _shot("12_conduciendo")
+	print("CM_INFO conducir pos=", ppos, " vel=", driving.speed, " hp=", driving.hp)
+	if ppos.distance_to(pk.pos) > 0.1 or ppos.distance_to(W.spawn) < 8.0:
+		print("CM_FALLO el coche no se ha movido")
+	_crime(5)
+	_crime(5)
+	_crime(5)
+	var reached := -1
+	for step in 900:
+		joy_vec = Vector2(0.0, 0.2)
+		await _tick(step)
+		if pol_near < 16.0:
+			reached = step
+			break
+	print("CM_INFO policia_llega_frame=", reached, " patrullas=", police.size(), " estrellas=", wanted)
+	if reached < 0:
+		print("CM_FALLO la policía no llega")
+	await _frames(20)
+	await _shot("13_persecucion")
+	joy_vec = Vector2.ZERO
+	for step in 400:
+		await _tick(step)
+		if wanted == 0:
+			break
+	if wanted != 0:
+		print("CM_FALLO no te detienen")
+	await _frames(40)
+	for k in 3:
+		mission_cd = 0.0
+		ppos = m_markers[0]
+		await _frames(2)
+		if mission.is_empty():
+			print("CM_FALLO la misión no empieza")
+			break
+		print("CM_INFO mision=", mission.title, " recompensa=", mission.reward)
+		if mission.type == "huida":
+			await _frames(30)
+			await _shot("14_huida")
+			wanted = 0
+		else:
+			await _shot("14_mision_" + mission.type)
+			while not mission.is_empty():
+				ppos = mission.pts[mission.stage]
+				await _frames(2)
+		await _frames(3)
+		if not mission.is_empty():
+			print("CM_FALLO la misión no termina")
+		_clear_police()
+		wanted = 0
+	mission_cd = 999.0
+	var victim: Dictionary = npcs[0]
+	ppos = victim.pos + Vector3(0.9, 0, 0)
+	pyaw = -PI / 2.0
+	var m0 := money
+	_punch()
+	await _frames(30)
+	await _shot("15_golpe")
+	if money == m0 or victim.down <= 0.0:
+		print("CM_FALLO el golpe no funciona")
+	wanted = 0
+	_clear_police()
+	var ai_car: Dictionary = {}
+	for c in cars:
+		if c.mode == "ai":
+			ai_car = c
+			break
+	ai_car.speed = 0.0
+	ppos = ai_car.pos + Vector3(2.4, 0, 0)
+	_update_action()
+	if cur_action.is_empty() or cur_action.type != "car":
+		print("CM_FALLO coche con conductor sin acción")
+	_enter_car(ai_car)
+	for step in 120:
+		joy_vec = Vector2(0.0, -1.0)
+		await _tick(step)
+	joy_vec = Vector2.ZERO
+	driving.speed = 0.0
+	_update_action()
+	_do_action()
+	if not driving.is_empty():
+		print("CM_FALLO no se puede salir del coche")
+	await _frames(20)
 	print("CM_STATS puertas=%d colisiones=%d vecinos=%d coches=%d salas=%d" % [W.doors.size(), W.colliders.size(), npcs.size(), cars.size(), W.rooms.size()])
 	print("CM_TEST_OK")
 	get_tree().quit()
