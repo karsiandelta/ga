@@ -1,0 +1,30 @@
+build-tools: /usr/local/lib/android/sdk/build-tools/37.0.0  plataforma: /usr/local/lib/android/sdk/platforms/android-37.2-beta3/android.jar
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 784.2k   0 784.2k   0      0  8.81M      0                              0100 784.2k   0 784.2k   0      0  8.80M      0                              0100 784.2k   0 784.2k   0      0  8.79M      0                              0
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  65534   0  65534   0      0  1.10M      0                              0100  65534   0  65534   0      0  1.10M      0                              0100  65534   0  65534   0      0  1.10M      0                              0
+2
+warning: [options] system modules path not set in conjunction with -source 11
+Note: app/src/es/karsiandelta/tesoro/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+1 warning
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+package: name='es.karsiandelta.tesoro' versionCode='1' versionName='1.1' platformBuildVersionName='DEV' platformBuildVersionCode='37' compileSdkVersion='37' compileSdkVersionCodename='DEV'
+minSdkVersion:'26'
+targetSdkVersion:'34'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='android.permission.ACCESS_FINE_LOCATION'
+uses-permission: name='android.permission.ACCESS_COARSE_LOCATION'
+uses-permission: name='android.permission.VIBRATE'
+application-label:'Tesoro de Albacete'
+total 260
+drwxr-xr-x 2 runner runner   4096 Nov 12 09:38 .
+drwxr-xr-x 8 runner runner   4096 Nov 12 09:38 ..
+-rw-r--r-- 1 runner runner 246527 Nov 12 09:38 TesoroAlbacete.apk
+-rw-r--r-- 1 runner runner   5554 Nov 12 09:38 TesoroAlbacete.apk.idsig
