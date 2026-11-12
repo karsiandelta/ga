@@ -2,6 +2,18 @@ extends CanvasLayer
 # Interfaz: necesidades, dinero, reloj, minimapa, botón de acción, joystick y pantalla de título.
 
 const World = preload("res://world.gd")
+const Shaders = preload("res://shaders.gd")
+
+const SVG_HEAD := "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'>"
+const ICONS := {
+	"hambre": "<circle cx='12' cy='12' r='11' fill='#e8703a'/><path d='M8 5v5a2 2 0 0 0 1.4 1.9V19h1.2v-7.1A2 2 0 0 0 12 10V5h-1v4h-.7V5h-1v4H8.6V5zM15.5 5c-1.4 0-2.3 1.8-2.3 4 0 1.6.6 2.6 1.6 3V19H16V5z' fill='#fff'/>",
+	"energia": "<circle cx='12' cy='12' r='11' fill='#f2b61f'/><path d='M13.5 4 7 13.2h4.2L10 20l6.8-9.4h-4.3z' fill='#fff'/>",
+	"diversion": "<circle cx='12' cy='12' r='11' fill='#b061d6'/><circle cx='8.6' cy='10' r='1.4' fill='#fff'/><circle cx='15.4' cy='10' r='1.4' fill='#fff'/><path d='M7 13.5a5 5 0 0 0 10 0z' fill='#fff'/>",
+	"social": "<circle cx='12' cy='12' r='11' fill='#2f9bd8'/><path d='M6 7.5h12a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5.2L9 18.8v-3.3H6A1.5 1.5 0 0 1 4.5 14V9A1.5 1.5 0 0 1 6 7.5z' fill='#fff'/>",
+	"dinero": "<path d='M12 1 20 12 12 23 4 12z' fill='#35d96a' stroke='#fff' stroke-width='1.4'/><path d='M12 1 12 23M4 12h16' stroke='#fff' stroke-width='.8' opacity='.7'/>",
+	"reloj": "<circle cx='12' cy='12' r='10' fill='#fff' stroke='#34415a' stroke-width='2'/><path d='M12 6v6l4 2.5' stroke='#34415a' stroke-width='2' fill='none' stroke-linecap='round'/>",
+}
+const LOGO := "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 120' width='200' height='120'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#7dffa0'/><stop offset='1' stop-color='#17b84f'/></linearGradient></defs><g fill='#ffffff' opacity='.92'><rect x='18' y='62' width='26' height='52'/><rect x='48' y='44' width='30' height='70'/><rect x='122' y='52' width='28' height='62'/><rect x='154' y='70' width='28' height='44'/><path d='M80 114V84l20-18 20 18v30z'/></g><g fill='#2a5d9a'><rect x='24' y='70' width='6' height='7'/><rect x='34' y='70' width='6' height='7'/><rect x='24' y='84' width='6' height='7'/><rect x='34' y='84' width='6' height='7'/><rect x='55' y='52' width='6' height='7'/><rect x='66' y='52' width='6' height='7'/><rect x='55' y='66' width='6' height='7'/><rect x='66' y='66' width='6' height='7'/><rect x='55' y='80' width='6' height='7'/><rect x='66' y='80' width='6' height='7'/><rect x='129' y='60' width='6' height='7'/><rect x='139' y='60' width='6' height='7'/><rect x='129' y='74' width='6' height='7'/><rect x='139' y='74' width='6' height='7'/><rect x='161' y='78' width='6' height='7'/><rect x='171' y='78' width='6' height='7'/><rect x='94' y='92' width='12' height='22'/></g><path d='M100 2 118 30 100 58 82 30z' fill='url(#g)' stroke='#fff' stroke-width='3'/><path d='M100 2v56M82 30h36' stroke='#fff' stroke-width='1.2' opacity='.7'/></svg>"
 
 signal action_pressed
 signal play_pressed
@@ -68,6 +80,25 @@ class Mini extends Control:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.5), false, 2.0)
 
 
+func _svg(body: String, scale: float, full: bool = false) -> ImageTexture:
+	var img := Image.new()
+	var src := body if full else SVG_HEAD + body + "</svg>"
+	if img.load_svg_from_string(src, scale) != OK:
+		return null
+	return ImageTexture.create_from_image(img)
+
+
+func _icon(id: String, px: float) -> TextureRect:
+	var t := TextureRect.new()
+	t.texture = _svg(ICONS[id], px / 24.0 * 2.0)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.custom_minimum_size = Vector2(px, px)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return t
+
+
 func _sb(col: Color, radius: int = 14, pad: int = 12) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = col
@@ -104,6 +135,11 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	var vig := ColorRect.new()
+	vig.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vig.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vig.material = Shaders.material(Shaders.VIGNETTE)
+	root.add_child(vig)
 
 	game_ui = Control.new()
 	game_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -125,11 +161,16 @@ func _ready() -> void:
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(vb)
 	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 22)
+	hb.add_theme_constant_override("separation", 8)
 	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(hb)
+	hb.add_child(_icon("dinero", 28))
 	money_l = _label("§ 0", 28, Color(0.55, 1.0, 0.6))
 	hb.add_child(money_l)
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(14, 0)
+	hb.add_child(gap)
+	hb.add_child(_icon("reloj", 24))
 	clock_l = _label("Lun 09:00", 24)
 	hb.add_child(clock_l)
 	for k in ["hambre", "energia", "diversion", "social"]:
@@ -137,8 +178,9 @@ func _ready() -> void:
 		row.add_theme_constant_override("separation", 10)
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vb.add_child(row)
+		row.add_child(_icon(k, 26))
 		var nl := _label(NEED_NAMES[k], 19)
-		nl.custom_minimum_size = Vector2(100, 0)
+		nl.custom_minimum_size = Vector2(92, 0)
 		row.add_child(nl)
 		var pb := ProgressBar.new()
 		pb.custom_minimum_size = Vector2(170, 18)
@@ -223,6 +265,13 @@ func _ready() -> void:
 	tv.add_theme_constant_override("separation", 14)
 	tv.alignment = BoxContainer.ALIGNMENT_CENTER
 	cc.add_child(tv)
+	var lg := TextureRect.new()
+	lg.texture = _svg(LOGO, 2.0, true)
+	lg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	lg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	lg.custom_minimum_size = Vector2(300, 180)
+	lg.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	tv.add_child(lg)
 	var t1 := _label("CIUDAD MIRASOL", 92, Color(1, 0.9, 0.4))
 	t1.add_theme_constant_override("outline_size", 16)
 	t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -231,7 +280,7 @@ func _ready() -> void:
 	t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tv.add_child(t2)
 	var sp := Control.new()
-	sp.custom_minimum_size = Vector2(0, 30)
+	sp.custom_minimum_size = Vector2(0, 8)
 	tv.add_child(sp)
 	var play := _button("JUGAR", 40, Color(0.16, 0.62, 0.36, 0.96))
 	play.custom_minimum_size = Vector2(320, 96)

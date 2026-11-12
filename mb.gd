@@ -6,6 +6,7 @@ var v := PackedVector3Array()
 var n := PackedVector3Array()
 var c := PackedColorArray()
 var xf := Transform3D.IDENTITY
+var m := 1.0  # tipo de superficie (va en el alfa del color)
 var _stack: Array = []
 
 
@@ -38,6 +39,7 @@ func tri(a: Vector3, b: Vector3, d: Vector3, na: Vector3, nb: Vector3, nd: Vecto
 		var tn := nb
 		nb = nd
 		nd = tn
+	col.a = m
 	v.append(a)
 	v.append(b)
 	v.append(d)
@@ -127,7 +129,11 @@ func disc(p: Vector3, r: float, col: Color, seg: int = 16) -> void:
 
 
 # Esfera / elipsoide. p = centro.
-func sphere(p: Vector3, r: Vector3, col: Color, seg: int = 8, rings: int = 5) -> void:
+static func _lump(d: Vector3, k: float) -> float:
+	return 1.0 + k * (sin(d.x * 5.3 + d.y * 3.1) * sin(d.z * 4.7 - d.y * 2.3) + 0.5 * sin(d.x * 9.1 + d.z * 7.7))
+
+
+func sphere(p: Vector3, r: Vector3, col: Color, seg: int = 8, rings: int = 5, lump: float = 0.0) -> void:
 	for j in rings:
 		var p0 := PI * float(j) / float(rings)
 		var p1 := PI * float(j + 1) / float(rings)
@@ -138,10 +144,19 @@ func sphere(p: Vector3, r: Vector3, col: Color, seg: int = 8, rings: int = 5) ->
 			var d01 := Vector3(sin(p0) * cos(a1), cos(p0), sin(p0) * sin(a1))
 			var d10 := Vector3(sin(p1) * cos(a0), cos(p1), sin(p1) * sin(a0))
 			var d11 := Vector3(sin(p1) * cos(a1), cos(p1), sin(p1) * sin(a1))
+			var q00 := p + d00 * r
+			var q01 := p + d01 * r
+			var q10 := p + d10 * r
+			var q11 := p + d11 * r
+			if lump > 0.0:
+				q00 = p + d00 * r * _lump(d00, lump)
+				q01 = p + d01 * r * _lump(d01, lump)
+				q10 = p + d10 * r * _lump(d10, lump)
+				q11 = p + d11 * r * _lump(d11, lump)
 			if j > 0:
-				tri(p + d00 * r, p + d01 * r, p + d11 * r, d00, d01, d11, col)
+				tri(q00, q01, q11, d00, d01, d11, col)
 			if j < rings - 1:
-				tri(p + d00 * r, p + d11 * r, p + d10 * r, d00, d11, d10, col)
+				tri(q00, q11, q10, d00, d11, d10, col)
 
 
 func build(mat: Material) -> ArrayMesh:

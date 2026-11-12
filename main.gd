@@ -4,6 +4,7 @@ extends Node3D
 const World = preload("res://world.gd")
 const Actors = preload("res://actors.gd")
 const Hud = preload("res://hud.gd")
+const Shaders = preload("res://shaders.gd")
 
 const NAMES_F := ["Marta", "Lucía", "Carmen", "Sofía", "Elena", "Paula", "Irene", "Nuria", "Alba", "Rocío", "Inés", "Clara", "Vera", "Noa"]
 const NAMES_M := ["Hugo", "Dani", "Pablo", "Javi", "Álex", "Mario", "Iván", "Leo", "Rubén", "Óscar", "Luis", "Marcos", "Adrián", "Sergio"]
@@ -21,7 +22,8 @@ var hud
 var cam: Camera3D
 var sun: DirectionalLight3D
 var env: Environment
-var sky_mat: ProceduralSkyMaterial
+var sky_mat: ShaderMaterial
+var sky_ms := -10000
 var player: Node3D
 var bob: MeshInstance3D
 var ppos := Vector3.ZERO
@@ -90,14 +92,18 @@ func _ready() -> void:
 func _setup_env() -> void:
 	var we := WorldEnvironment.new()
 	env = Environment.new()
-	sky_mat = ProceduralSkyMaterial.new()
-	sky_mat.sun_angle_max = 12.0
+	sky_mat = Shaders.material(Shaders.SKY, W.noise)
 	var sky := Sky.new()
+	sky.radiance_size = Sky.RADIANCE_SIZE_64
 	sky.sky_material = sky_mat
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	env.adjustment_enabled = true
+	env.adjustment_contrast = 1.04
+	env.adjustment_saturation = 1.06
 	env.fog_enabled = true
 	env.fog_density = 0.0007
 	env.fog_sky_affect = 0.25
@@ -406,25 +412,27 @@ func _update_time(dt: float) -> void:
 		day = (day + 1) % 7
 	var f := clampf(sin((time_h - 6.0) / 12.0 * PI), 0.0, 1.0)
 	var fs := smoothstep(0.0, 0.35, f)
-	var dusk := clampf(1.0 - absf(f - 0.12) / 0.2, 0.0, 1.0)
+	var dusk := clampf(1.0 - absf(f - 0.12) / 0.2, 0.0, 1.0) * clampf(f * 25.0, 0.0, 1.0)
 	sun.rotation = Vector3(-deg_to_rad(lerpf(14.0, 62.0, f)), deg_to_rad(-50.0 + (time_h - 12.0) * 9.0), 0)
 	var day_col := Color(1.0, 0.62, 0.36).lerp(Color(1.0, 0.97, 0.9), clampf(f * 2.5, 0.0, 1.0))
 	sun.light_color = Color(0.55, 0.65, 1.0).lerp(day_col, fs)
-	sun.light_energy = lerpf(0.2, 0.82, fs)
-	env.ambient_light_color = Color(0.2, 0.25, 0.45).lerp(Color(0.6, 0.66, 0.78), fs)
-	env.ambient_light_energy = lerpf(0.7, 0.46, fs)
+	sun.light_energy = lerpf(0.32, 0.86, fs)
+	env.ambient_light_color = Color(0.26, 0.32, 0.55).lerp(Color(0.6, 0.66, 0.78), fs)
+	env.ambient_light_energy = lerpf(1.25, 0.5, fs)
 	var top := Color(0.02, 0.03, 0.1).lerp(Color(0.22, 0.47, 0.9), fs)
 	var hor := Color(0.07, 0.09, 0.2).lerp(Color(0.68, 0.82, 0.96), fs).lerp(Color(1.0, 0.58, 0.32), dusk * 0.7)
-	sky_mat.sky_top_color = top
-	sky_mat.sky_horizon_color = hor
-	sky_mat.ground_horizon_color = hor
-	sky_mat.ground_bottom_color = hor.darkened(0.3)
 	env.fog_light_color = hor
 	var night := 1.0 - fs
-	W.mat_glow.emission_energy_multiplier = night * 2.4
-	W.mat_glow.albedo_color = Color(0.5, 0.68, 0.85).lerp(Color(1.0, 0.86, 0.58), night)
-	W.mat_glow.metallic = lerpf(0.3, 0.0, night)
-
+	var now := Time.get_ticks_msec()
+	if dt == 0.0 or now - sky_ms > 500:
+		sky_ms = now
+		sky_mat.set_shader_parameter("top_col", top)
+		sky_mat.set_shader_parameter("hor_col", hor)
+		sky_mat.set_shader_parameter("night", night)
+		sky_mat.set_shader_parameter("cloud_t", now * 0.0000035)
+		W.mat_glow.set_shader_parameter("sky_col", hor.lerp(top, 0.4))
+		W.mat_water.set_shader_parameter("sky_col", hor.lerp(top, 0.5))
+	W.mat_glow.set_shader_parameter("night", night)
 
 func _clock_text() -> String:
 	var h := int(time_h)
@@ -931,6 +939,13 @@ func _run_test() -> void:
 	_on_play()
 	await _frames(20)
 	await _shot("01_casa")
+	_tp(World.block_center(2, 2) + Vector3(3, 0, 16), 0.35, 0.08, 3.6)
+	pyaw = 0.2
+	await _frames(6)
+	await _shot("01b_personaje")
+	_tp(Vector3(World.road_pos(2) + 2.0, 0, World.block_center(0, 3).z + 6.0), 0.9, 0.16, 7.0)
+	await _frames(6)
+	await _shot("01c_coches")
 	_look(Vector3(0, 150, 215), Vector3(0, 0, 20))
 	await _frames(4)
 	await _shot("02_ciudad")

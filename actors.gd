@@ -12,37 +12,68 @@ const CAR_COLS := [Color(0.8, 0.15, 0.15), Color(0.15, 0.35, 0.75), Color(0.92, 
 
 static func person(mat: Material, skin: Color, shirt: Color, pants: Color, hair: Color, female: bool) -> Node3D:
 	var root := Node3D.new()
+	var style := int(hair.r * 97.0 + shirt.g * 31.0 + pants.b * 13.0) % 3
 	var b = MB.new()
-	b.cyl(Vector3(0, 0.86, 0), 0.19, 0.23, 0.58, shirt, 8)
-	b.cyl(Vector3(0, 0.78, 0), 0.2, 0.19, 0.1, pants, 8, false)
-	b.cyl(Vector3(0, 1.43, 0), 0.07, 0.07, 0.09, skin, 6, false)
-	b.sphere(Vector3(0, 1.64, 0), Vector3(0.17, 0.19, 0.17), skin, 10, 6)
-	b.sphere(Vector3(0, 1.7, -0.035), Vector3(0.185, 0.165, 0.185), hair, 10, 5)
+	b.m = 0.9
+	# cadera, torso y hombros (torso aplanado de delante a atrás)
+	b.sphere(Vector3(0, 0.88, 0), Vector3(0.2, 0.14, 0.15), pants, 12, 6)
+	b.push_t(Transform3D(Basis().scaled(Vector3(1.0, 1.0, 0.72)), Vector3.ZERO))
+	b.cyl(Vector3(0, 0.9, 0), 0.185, 0.235, 0.5, shirt, 14, false)
+	b.pop()
+	b.sphere(Vector3(0, 1.4, 0), Vector3(0.245, 0.1, 0.155), shirt, 14, 6)
+	if female and style != 1:
+		b.cyl(Vector3(0, 0.6, 0), 0.27, 0.19, 0.32, shirt.darkened(0.2), 14, false)
+	b.cyl(Vector3(0, 1.44, 0), 0.062, 0.058, 0.1, skin, 10, false)
+	b.cyl(Vector3(0, 1.44, 0), 0.085, 0.075, 0.035, shirt.lightened(0.25), 10, false)
+	# cabeza
+	b.sphere(Vector3(0, 1.67, 0), Vector3(0.18, 0.2, 0.185), skin, 16, 10)
+	for sx in [-1.0, 1.0]:
+		b.sphere(Vector3(sx * 0.178, 1.66, 0.0), Vector3(0.03, 0.045, 0.035), skin.darkened(0.06), 6, 4)
+		b.sphere(Vector3(sx * 0.068, 1.69, 0.158), Vector3(0.04, 0.047, 0.02), Color(0.97, 0.97, 0.97), 8, 6)
+		b.sphere(Vector3(sx * 0.068, 1.688, 0.172), Vector3(0.021, 0.027, 0.012), Color(0.12, 0.2, 0.3) if style == 0 else Color(0.2, 0.12, 0.06), 8, 6)
+		b.box(Vector3(sx * 0.068, 1.745, 0.165), Vector3(0.07, 0.014, 0.015), hair.darkened(0.2))
+	b.sphere(Vector3(0, 1.645, 0.185), Vector3(0.024, 0.03, 0.03), skin.darkened(0.05), 6, 4)
+	b.box(Vector3(0, 1.585, 0.168), Vector3(0.075, 0.016, 0.02), Color(0.7, 0.28, 0.28))
+	# pelo
+	b.sphere(Vector3(0, 1.735, -0.03), Vector3(0.195, 0.165, 0.2), hair, 14, 7)
+	b.sphere(Vector3(0, 1.82, 0.09), Vector3(0.15, 0.055, 0.09), hair.lightened(0.05), 10, 5)
 	if female:
-		b.sphere(Vector3(0, 1.53, -0.1), Vector3(0.17, 0.25, 0.1), hair, 8, 5)
-	var dark := Color(0.08, 0.08, 0.1)
-	b.box(Vector3(-0.065, 1.63, 0.158), Vector3(0.035, 0.045, 0.02), dark)
-	b.box(Vector3(0.065, 1.63, 0.158), Vector3(0.035, 0.045, 0.02), dark)
-	b.box(Vector3(0, 1.56, 0.16), Vector3(0.07, 0.015, 0.02), Color(0.7, 0.3, 0.3))
+		if style == 2:
+			b.sphere(Vector3(0, 1.9, -0.1), Vector3(0.085, 0.085, 0.085), hair, 8, 6)
+		else:
+			b.sphere(Vector3(0, 1.52, -0.11), Vector3(0.175, 0.27, 0.1), hair, 12, 7)
+			for sx in [-1.0, 1.0]:
+				b.sphere(Vector3(sx * 0.16, 1.58, -0.02), Vector3(0.05, 0.17, 0.09), hair, 8, 5)
+	elif style == 1:
+		b.sphere(Vector3(0, 1.84, -0.01), Vector3(0.13, 0.07, 0.15), hair.lightened(0.08), 10, 5)
 	b.instance(root, mat)
 	var limbs: Array = []
 	for s in [-1.0, 1.0]:
 		var leg := Node3D.new()
-		leg.position = Vector3(0.1 * s, 0.84, 0)
+		leg.position = Vector3(0.1 * s, 0.86, 0)
 		root.add_child(leg)
 		var lb = MB.new()
-		lb.cyl(Vector3(0, -0.78, 0), 0.075, 0.1, 0.78, pants, 6, false)
-		lb.box(Vector3(0, -0.84, 0.04), Vector3(0.13, 0.09, 0.27), Color(0.15, 0.13, 0.12))
+		lb.m = 0.9
+		var bare := female and style != 1
+		lb.cyl(Vector3(0, -0.42, 0), 0.085, 0.105, 0.42, skin if bare else pants, 10, false)
+		lb.cyl(Vector3(0, -0.8, 0), 0.07, 0.085, 0.38, skin if bare else pants, 10, false)
+		lb.sphere(Vector3(0, -0.8, 0.045), Vector3(0.078, 0.062, 0.15), Color(0.92, 0.92, 0.9) if style == 2 else Color(0.16, 0.13, 0.12), 10, 6)
+		lb.box(Vector3(0, -0.865, 0.045), Vector3(0.14, 0.025, 0.28), Color(0.85, 0.85, 0.82))
 		lb.instance(leg, mat)
 		limbs.append(leg)
 	for s in [-1.0, 1.0]:
 		var arm := Node3D.new()
 		arm.position = Vector3(0.29 * s, 1.4, 0)
+		arm.rotation.z = 0.07 * s
 		root.add_child(arm)
 		var ab = MB.new()
-		ab.cyl(Vector3(0, -0.3, 0), 0.06, 0.075, 0.32, shirt, 6, false)
-		ab.cyl(Vector3(0, -0.56, 0), 0.05, 0.058, 0.26, skin, 6, false)
-		ab.sphere(Vector3(0, -0.6, 0), Vector3(0.06, 0.07, 0.06), skin, 6, 4)
+		ab.m = 0.9
+		ab.sphere(Vector3(0, -0.01, 0), Vector3(0.082, 0.082, 0.082), shirt, 10, 6)
+		ab.cyl(Vector3(0, -0.27, 0), 0.062, 0.078, 0.27, shirt if style != 0 else skin, 10, false)
+		if style == 0:
+			ab.cyl(Vector3(0, -0.14, 0), 0.076, 0.08, 0.14, shirt, 10, false)
+		ab.cyl(Vector3(0, -0.55, 0), 0.05, 0.06, 0.29, skin, 10, false)
+		ab.sphere(Vector3(0, -0.6, 0.005), Vector3(0.058, 0.075, 0.055), skin, 8, 6)
 		ab.instance(arm, mat)
 		limbs.append(arm)
 	root.set_meta("limbs", limbs)
@@ -85,9 +116,13 @@ static func _wheel(b, x: float, z: float, r: float, side: float) -> void:
 	# side = +1 rueda derecha (tapa hacia +x), -1 izquierda
 	var rot := -PI / 2.0 if side > 0.0 else PI / 2.0
 	b.push_t(Transform3D(Basis(Vector3(0, 0, 1), rot), Vector3(x - side * 0.26, r, z)))
-	b.cyl(Vector3.ZERO, r, r, 0.26, Color(0.1, 0.1, 0.11), 10)
-	b.cyl(Vector3(0, 0.26, 0), r * 0.55, r * 0.5, 0.02, Color(0.7, 0.72, 0.75), 8)
+	var pm: float = b.m
+	b.m = 1.0
+	b.cyl(Vector3.ZERO, r, r, 0.26, Color(0.07, 0.07, 0.08), 14)
+	b.m = 0.8
+	b.cyl(Vector3(0, 0.26, 0), r * 0.6, r * 0.5, 0.025, Color(0.75, 0.77, 0.8), 10)
 	b.pop()
+	b.m = pm
 
 
 # kind: 0 coche, 1 taxi, 2 autobús. El frente mira a +z.
@@ -95,7 +130,8 @@ static func car(mat: Material, glow: Material, col: Color, kind: int) -> Node3D:
 	var root := Node3D.new()
 	var b = MB.new()
 	var g = MB.new()
-	var glass := Color(0.13, 0.18, 0.26)
+	var glass := Color(0.05, 0.08, 0.12)
+	b.m = 0.8
 	if kind == 2:
 		var bl := 9.0
 		var bw := 2.4
@@ -114,7 +150,12 @@ static func car(mat: Material, glow: Material, col: Color, kind: int) -> Node3D:
 	else:
 		var l := 4.2
 		var w := 1.8
-		b.box(Vector3(0, 0.3, 0), Vector3(w, 0.55, l), col, true)
+		b.box(Vector3(0, 0.3, 0), Vector3(w, 0.5, l), col, true)
+		b.box(Vector3(0, 0.8, 0), Vector3(w - 0.08, 0.07, l - 0.12), col)
+		for sz in [-1.0, 1.0]:
+			b.push_t(Transform3D(Basis(Vector3(1, 0, 0), -sz * 0.6), Vector3(0, 0.84, -0.25 + sz * (l * 0.25 + 0.16))))
+			b.box(Vector3(0, 0, 0), Vector3(w - 0.24, 0.05, 0.62), glass, true)
+			b.pop()
 		b.box(Vector3(0, 0.85, -0.25), Vector3(w - 0.22, 0.48, l * 0.5), glass)
 		b.box(Vector3(0, 1.33, -0.25), Vector3(w - 0.16, 0.07, l * 0.5 + 0.06), col)
 		for sx in [-1.0, 1.0]:

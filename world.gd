@@ -2,6 +2,7 @@ extends RefCounted
 # Genera toda la ciudad y los interiores por código (sin archivos de modelos).
 
 const MB = preload("res://mb.gd")
+const Shaders = preload("res://shaders.gd")
 
 const N := 5
 const BLOCK := 44.0
@@ -27,9 +28,10 @@ const ROOFS := [Color(0.7, 0.3, 0.25), Color(0.3, 0.32, 0.36), Color(0.5, 0.33, 
 const FLOWERS := [Color(0.95, 0.3, 0.35), Color(0.98, 0.8, 0.2), Color(0.9, 0.5, 0.85), Color(1, 1, 1), Color(0.95, 0.55, 0.2)]
 
 var root: Node3D
-var mat_solid: StandardMaterial3D
-var mat_glow: StandardMaterial3D
-var mat_water: StandardMaterial3D
+var mat_solid: ShaderMaterial
+var mat_glow: ShaderMaterial
+var mat_water: ShaderMaterial
+var noise: ImageTexture
 var colliders: Array[Rect2] = []
 var buildings: Array = []
 var doors: Array = []
@@ -82,21 +84,10 @@ func build(parent: Node) -> void:
 	root = Node3D.new()
 	parent.add_child(root)
 	rng.seed = 20261112
-	mat_solid = StandardMaterial3D.new()
-	mat_solid.vertex_color_use_as_albedo = true
-	mat_solid.vertex_color_is_srgb = true
-	mat_solid.roughness = 0.9
-	mat_glow = StandardMaterial3D.new()
-	mat_glow.albedo_color = Color(0.5, 0.68, 0.85)
-	mat_glow.roughness = 0.15
-	mat_glow.metallic = 0.3
-	mat_glow.emission_enabled = true
-	mat_glow.emission = Color(1.0, 0.85, 0.55)
-	mat_glow.emission_energy_multiplier = 0.0
-	mat_water = StandardMaterial3D.new()
-	mat_water.albedo_color = Color(0.22, 0.52, 0.78)
-	mat_water.roughness = 0.06
-	mat_water.metallic = 0.45
+	noise = Shaders.noise_texture()
+	mat_solid = Shaders.material(Shaders.WORLD, noise)
+	mat_glow = Shaders.material(Shaders.GLASS)
+	mat_water = Shaders.material(Shaders.WATER, noise)
 	_water = MB.new()
 	_ground()
 	for j in N:
@@ -127,11 +118,15 @@ func _label(text: String, pos: Vector3, pix: float, col: Color, billboard: bool 
 
 func _ground() -> void:
 	var g = MB.new()
+	g.m = 0.0
 	g.flat(Vector3(0, -0.12, 0), 1600, 1600, Color(0.33, 0.55, 0.26))
+	g.m = 0.1
 	g.flat(Vector3(0, 0, 0), 298, 298, C_ASPHALT)
+	g.m = 0.6
 	for s in [-1.0, 1.0]:
 		g.box(Vector3(s * 150.5, 0, 0), Vector3(3, 0.15, 304), C_SIDEWALK)
 		g.box(Vector3(0, 0, s * 150.5), Vector3(304, 0.15, 3), C_SIDEWALK)
+	g.m = 1.0
 	var white := Color(0.92, 0.92, 0.9)
 	for k in N + 1:
 		var r := road_pos(k)
@@ -151,19 +146,26 @@ func _tree(mb, p: Vector3, sc: float, kind: int, collide: bool = true) -> void:
 	var g1 := Color(0.2 + rng.randf() * 0.12, 0.5 + rng.randf() * 0.15, 0.2 + rng.randf() * 0.08)
 	var g2 := g1.lightened(0.12)
 	if kind == 1:
-		mb.cyl(p, 0.18 * sc, 0.14 * sc, 1.2 * sc, C_BROWN, 6, false)
+		mb.m = 0.5
+		mb.cyl(p, 0.18 * sc, 0.14 * sc, 1.2 * sc, C_BROWN, 8, false)
+		mb.m = 0.7
 		var dg := g1.darkened(0.25)
 		mb.cyl(p + Vector3(0, 1.0, 0) * sc, 1.5 * sc, 0.0, 2.2 * sc, dg, 8, false)
 		mb.cyl(p + Vector3(0, 2.3, 0) * sc, 1.15 * sc, 0.0, 1.9 * sc, dg.lightened(0.06), 8, false)
 		mb.cyl(p + Vector3(0, 3.5, 0) * sc, 0.8 * sc, 0.0, 1.6 * sc, dg.lightened(0.12), 8, false)
 	elif kind == 2:
-		mb.cyl(p, 0.16 * sc, 0.12 * sc, 1.6 * sc, C_BROWN, 6, false)
-		mb.sphere(p + Vector3(0, 4.0, 0) * sc, Vector3(1.0, 2.8, 1.0) * sc, g1, 8, 6)
+		mb.m = 0.5
+		mb.cyl(p, 0.16 * sc, 0.12 * sc, 1.6 * sc, C_BROWN, 8, false)
+		mb.m = 0.7
+		mb.sphere(p + Vector3(0, 4.0, 0) * sc, Vector3(1.0, 2.8, 1.0) * sc, g1, 10, 7, 0.2)
 	else:
-		mb.cyl(p, 0.18 * sc, 0.12 * sc, 2.3 * sc, C_BROWN, 6, false)
-		mb.sphere(p + Vector3(0, 3.4, 0) * sc, Vector3(1.6, 1.4, 1.6) * sc, g1, 8, 5)
-		mb.sphere(p + Vector3(0.75, 2.8, 0.35) * sc, Vector3(1.05, 0.95, 1.05) * sc, g2, 7, 4)
-		mb.sphere(p + Vector3(-0.65, 2.9, -0.45) * sc, Vector3(1.1, 1.0, 1.1) * sc, g1.darkened(0.08), 7, 4)
+		mb.m = 0.5
+		mb.cyl(p, 0.18 * sc, 0.12 * sc, 2.3 * sc, C_BROWN, 8, false)
+		mb.m = 0.7
+		mb.sphere(p + Vector3(0, 3.4, 0) * sc, Vector3(1.6, 1.4, 1.6) * sc, g1, 10, 7, 0.2)
+		mb.sphere(p + Vector3(0.75, 2.8, 0.35) * sc, Vector3(1.05, 0.95, 1.05) * sc, g2, 10, 7, 0.2)
+		mb.sphere(p + Vector3(-0.65, 2.9, -0.45) * sc, Vector3(1.1, 1.0, 1.1) * sc, g1.darkened(0.08), 10, 7, 0.2)
+	mb.m = 1.0
 	if collide:
 		add_col(p.x, p.z, 0.5, 0.5)
 
@@ -176,8 +178,10 @@ func _lamp(s, g, p: Vector3) -> void:
 
 func _bench(s, p: Vector3, rot: float) -> void:
 	s.push(p, rot)
+	s.m = 0.5
 	s.box(Vector3(0, 0.4, 0), Vector3(1.7, 0.07, 0.5), C_WOOD, true)
 	s.box(Vector3(0, 0.55, -0.24), Vector3(1.7, 0.45, 0.06), C_WOOD)
+	s.m = 1.0
 	for sx in [-0.7, 0.7]:
 		s.box(Vector3(sx, 0, 0), Vector3(0.08, 0.4, 0.45), C_DARK)
 	s.pop()
@@ -194,12 +198,15 @@ func _flowers(s, p: Vector3, count: int, spread: float) -> void:
 
 
 func _win(s, g, p: Vector3, w: float, h: float, along_x: bool, sgn: float) -> void:
+	var wc := Color(rng.randf(), rng.randf(), 0.0)
+	g.m = 0.0
 	if along_x:
 		s.box(Vector3(p.x, p.y - 0.08, p.z + sgn * 0.02), Vector3(w + 0.18, h + 0.16, 0.06), C_WHITE)
-		g.box(Vector3(p.x, p.y, p.z + sgn * 0.04), Vector3(w, h, 0.07), Color.WHITE)
+		g.box(Vector3(p.x, p.y, p.z + sgn * 0.04), Vector3(w, h, 0.07), wc)
 	else:
 		s.box(Vector3(p.x + sgn * 0.02, p.y - 0.08, p.z), Vector3(0.06, h + 0.16, w + 0.18), C_WHITE)
-		g.box(Vector3(p.x + sgn * 0.04, p.y, p.z), Vector3(0.07, h, w), Color.WHITE)
+		g.box(Vector3(p.x + sgn * 0.04, p.y, p.z), Vector3(0.07, h, w), wc)
+	g.m = 1.0
 
 
 func _block(i: int, j: int) -> void:
@@ -207,6 +214,7 @@ func _block(i: int, j: int) -> void:
 	var t: String = LAYOUT[j][i]
 	var s = MB.new()
 	var g = MB.new()
+	s.m = 0.6
 	s.box(Vector3(c.x, 0, c.z), Vector3(50, 0.15, 50), C_SIDEWALK)
 	var lot := C_GRASS
 	if t == "S" or t == "C" or t == "F" or t == "G":
@@ -217,7 +225,9 @@ func _block(i: int, j: int) -> void:
 		lot = Color(0.3, 0.56, 0.25)
 	elif t == "A":
 		lot = Color(0.7, 0.68, 0.64)
+	s.m = 0.0 if (t == "R" or t == "H" or t == "K") else 0.6
 	s.flat(Vector3(c.x, 0.16, c.z), 44, 44, lot)
+	s.m = 1.0
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.0, 1.0]:
 			_lamp(s, g, c + Vector3(sx * 24.5, 0.15, sz * 24.5))
@@ -247,13 +257,21 @@ func _block(i: int, j: int) -> void:
 func _house(s, g, pos: Vector3, w: float, d: float, floors: int, face: float, wall: Color, roofc: Color, kind: String, hname: String, lot_edge: float) -> void:
 	var h := 3.0 * floors
 	var y0 := 0.16
+	s.m = 0.2
 	s.box(Vector3(pos.x, y0, pos.z), Vector3(w, h, d), wall)
-	s.box(Vector3(pos.x, y0, pos.z), Vector3(w + 0.12, 0.4, d + 0.12), wall.darkened(0.3))
+	s.m = 0.3
+	s.box(Vector3(pos.x, y0, pos.z), Vector3(w + 0.12, 0.5, d + 0.12), Color(0.62, 0.4, 0.32))
+	s.m = 0.4
 	s.prism(Vector3(pos.x, y0 + h, pos.z), Vector3(w + 0.9, 2.4, d + 0.9), roofc, wall)
+	s.m = 0.3
 	s.box(Vector3(pos.x + w * 0.28, y0 + h + 0.6, pos.z - d * 0.18), Vector3(0.7, 2.0, 0.7), Color(0.6, 0.35, 0.28))
+	s.m = 0.5
 	var fz := pos.z + face * d * 0.5
+	s.m = 1.0
 	s.box(Vector3(pos.x, y0, fz + face * 0.02), Vector3(1.45, 2.32, 0.08), C_WHITE)
+	s.m = 0.5
 	s.box(Vector3(pos.x, y0, fz + face * 0.05), Vector3(1.15, 2.15, 0.1), Color(0.4, 0.22, 0.14))
+	s.m = 1.0
 	s.box(Vector3(pos.x + 0.38, y0 + 1.0, fz + face * 0.11), Vector3(0.08, 0.08, 0.06), Color(0.9, 0.75, 0.3))
 	s.box(Vector3(pos.x, y0, fz + face * 0.65), Vector3(2.0, 0.12, 1.3), C_STONE)
 	s.box(Vector3(pos.x, y0 + 2.5, fz + face * 0.65), Vector3(2.6, 0.12, 1.4), roofc, true)
@@ -267,11 +285,14 @@ func _house(s, g, pos: Vector3, w: float, d: float, floors: int, face: float, wa
 			_win(s, g, Vector3(pos.x + sx * w * 0.5, yy, pos.z), 1.5, 1.3, false, sx)
 		if fl > 0:
 			_win(s, g, Vector3(pos.x, yy, fz), 1.2, 1.3, true, face)
+	s.m = 0.6
 	var path_len := absf(lot_edge - (fz + face * 1.3))
 	s.box(Vector3(pos.x, y0, (lot_edge + fz + face * 1.3) * 0.5), Vector3(1.5, 0.03, path_len), C_STONE)
+	s.m = 0.7
 	for sx in [-1.0, 1.0]:
 		s.sphere(Vector3(pos.x + sx * (w * 0.5 - 1.2), y0 + 0.45, fz + face * 0.7), Vector3(0.8, 0.6, 0.6), C_HEDGE.lightened(0.1), 7, 4)
 		_flowers(s, Vector3(pos.x + sx * 2.6, y0, fz + face * 2.2), 5, 0.7)
+	s.m = 1.0
 	s.box(Vector3(pos.x + 1.3, y0, lot_edge - face * 0.6), Vector3(0.1, 1.0, 0.1), C_DARK)
 	s.box(Vector3(pos.x + 1.3, y0 + 1.0, lot_edge - face * 0.6), Vector3(0.3, 0.25, 0.45), roofc)
 	add_col(pos.x, pos.z, w, d)
@@ -305,10 +326,12 @@ func _residential(s, g, c: Vector3, home: bool) -> void:
 		_tree(s, Vector3(c.x + q[0] + sgx * 7.0, 0.16, c.z + q[1] + face * 7.5), rng.randf_range(0.75, 1.0), rng.randi() % 3)
 		_flowers(s, Vector3(c.x + q[0] - sgx * 6.0, 0.16, c.z + q[1] + face * 8.0), 8, 1.2)
 		qi += 1
+	s.m = 0.7
 	s.box(Vector3(c.x, 0.16, c.z), Vector3(0.7, 1.1, 41), C_HEDGE)
 	add_col(c.x, c.z, 0.7, 41)
 	s.box(Vector3(c.x, 0.16, c.z), Vector3(41, 1.1, 0.7), C_HEDGE.darkened(0.06))
 	add_col(c.x, c.z, 41, 0.7)
+	s.m = 1.0
 
 
 # ---------------------------------------------------------------- pisos
@@ -323,9 +346,13 @@ func _apartments(s, g, c: Vector3) -> void:
 		var h := floors * 3.0 + 0.6
 		var wall: Color = cols[rng.randi() % cols.size()]
 		var bz := c.z - 4.0
+		s.m = 0.2
 		s.box(Vector3(bx, 0.16, bz), Vector3(w, h, d), wall)
-		s.box(Vector3(bx, 0.16, bz), Vector3(w + 0.16, 3.1, d + 0.16), wall.darkened(0.32))
+		s.m = 0.3
+		s.box(Vector3(bx, 0.16, bz), Vector3(w + 0.16, 3.1, d + 0.16), Color(0.6, 0.38, 0.3))
+		s.m = 0.2
 		s.box(Vector3(bx, 0.16 + h, bz), Vector3(w + 0.4, 0.5, d + 0.4), wall.darkened(0.18))
+		s.m = 1.0
 		s.box(Vector3(bx + 3.5, 0.66 + h, bz - 3.0), Vector3(3.2, 2.2, 3.2), Color(0.6, 0.6, 0.62))
 		s.cyl(Vector3(bx - 4.0, 0.66 + h, bz + 2.0), 1.2, 1.2, 1.8, Color(0.45, 0.5, 0.55), 10)
 		var fz := bz + d * 0.5
@@ -338,7 +365,9 @@ func _apartments(s, g, c: Vector3) -> void:
 				_win(s, g, Vector3(bx - w * 0.5, yy, bz + a), 1.7, 1.5, false, -1.0)
 			s.box(Vector3(bx, 0.16 + fl * 3.0 + 0.1, fz + 0.65), Vector3(w - 2.0, 0.12, 1.3), C_WHITE, true)
 			s.box(Vector3(bx, 0.16 + fl * 3.0 + 0.22, fz + 1.27), Vector3(w - 2.0, 0.85, 0.06), C_DARK)
+		g.m = 0.5
 		g.box(Vector3(bx, 0.16, fz + 0.05), Vector3(2.4, 2.5, 0.1), Color.WHITE)
+		g.m = 1.0
 		s.box(Vector3(bx, 0.16, fz + 0.02), Vector3(2.8, 2.7, 0.08), C_DARK)
 		s.box(Vector3(bx, 2.9, fz + 1.1), Vector3(4.4, 0.2, 2.2), C_DARK, true)
 		for a in [-5.5, 5.5]:
@@ -348,7 +377,9 @@ func _apartments(s, g, c: Vector3) -> void:
 		add_col(bx, bz, w, d)
 		buildings.append([Rect2(bx - w * 0.5 - 0.5, bz - d * 0.5 - 0.5, w + 1.0, d + 1.0), h + 1.0])
 		doors.append({"pos": Vector3(bx, 0, fz + 1.1), "dir": Vector3(0, 0, 1), "kind": "piso", "name": bname})
+	s.m = 0.0
 	s.flat(Vector3(c.x, 0.17, c.z + 16.5), 40, 7, C_GRASS)
+	s.m = 1.0
 	for sx in [-16.0, 0.0, 16.0]:
 		_tree(s, Vector3(c.x + sx, 0.17, c.z + 17.0), 0.9, rng.randi() % 3)
 	_bench(s, Vector3(c.x - 8, 0.16, c.z + 12.0), 0.0)
@@ -384,17 +415,23 @@ func _shop(s, g, c: Vector3, t: String) -> void:
 	var h := 6.5
 	var bz := c.z - 9.0
 	var fz := c.z + 2.0
+	s.m = 0.2
 	s.box(Vector3(c.x, 0.16, bz), Vector3(w, h, d), wallc)
-	s.box(Vector3(c.x, 0.16, bz), Vector3(w + 0.14, 0.6, d + 0.14), wallc.darkened(0.35))
+	s.m = 0.3
+	s.box(Vector3(c.x, 0.16, bz), Vector3(w + 0.14, 0.9, d + 0.14), wallc.darkened(0.4))
+	s.m = 1.0
 	s.box(Vector3(c.x, 0.16 + h, bz), Vector3(w + 0.5, 0.6, d + 0.5), accent)
 	s.box(Vector3(c.x - 8, 0.76 + h, bz - 4), Vector3(2.6, 1.2, 2.6), Color(0.62, 0.63, 0.66))
 	s.box(Vector3(c.x + 6, 0.76 + h, bz + 2), Vector3(3.5, 1.0, 2.2), Color(0.62, 0.63, 0.66))
 	for sx in [-1.0, 1.0]:
 		s.box(Vector3(c.x + sx * 9.0, 0.75, fz + 0.02), Vector3(10.5, 3.4, 0.08), C_DARK)
+		g.m = 0.5
 		g.box(Vector3(c.x + sx * 9.0, 0.9, fz + 0.04), Vector3(10.0, 3.1, 0.1), Color.WHITE)
 		_win(s, g, Vector3(c.x + sx * w * 0.5, 2.2, bz), 6.0, 2.0, false, sx)
 	s.box(Vector3(c.x, 0.16, fz + 0.02), Vector3(3.1, 3.0, 0.08), C_DARK)
+	g.m = 0.5
 	g.box(Vector3(c.x, 0.16, fz + 0.05), Vector3(2.6, 2.8, 0.1), Color.WHITE)
+	g.m = 1.0
 	for k in 16:
 		s.box(Vector3(c.x - 15.0 + k * 2.0, 3.95, fz + 1.15), Vector3(2.0, 0.14, 2.3), accent if k % 2 == 0 else C_WHITE, true)
 	s.box(Vector3(c.x, 4.5, fz + 0.1), Vector3(17, 1.7, 0.3), accent.darkened(0.15))
@@ -437,8 +474,10 @@ func _shop(s, g, c: Vector3, t: String) -> void:
 # ---------------------------------------------------------------- plaza y parque
 
 func _plaza(s, g, c: Vector3) -> void:
+	s.m = 0.6
 	s.disc(Vector3(c.x, 0.17, c.z), 13.0, Color(0.76, 0.69, 0.56), 28)
 	s.disc(Vector3(c.x, 0.175, c.z), 6.2, Color(0.7, 0.6, 0.47), 24)
+	s.m = 1.0
 	s.cyl(Vector3(c.x, 0.16, c.z), 4.3, 4.3, 0.7, C_STONE, 22)
 	_water.disc(Vector3(c.x, 0.88, c.z), 3.8, Color.WHITE, 22)
 	s.cyl(Vector3(c.x, 0.86, c.z), 0.55, 0.4, 2.0, C_STONE.lightened(0.1), 10)
@@ -467,7 +506,9 @@ func _plaza(s, g, c: Vector3) -> void:
 		_tree(s, tp2 + Vector3(0, 0.4, 0), 1.0, 2, false)
 		add_col(tp2.x, tp2.z, 2.4, 2.4)
 	var kp := Vector3(c.x + 13.5, 0.16, c.z - 14.0)
+	s.m = 0.5
 	s.box(kp, Vector3(3.6, 2.6, 3.6), Color(0.9, 0.3, 0.28))
+	s.m = 1.0
 	s.box(kp + Vector3(0, 1.0, 1.82), Vector3(2.6, 1.2, 0.06), C_DARK)
 	s.cyl(kp + Vector3(0, 2.6, 0), 3.0, 0.1, 1.3, C_WHITE, 8)
 	add_col(kp.x, kp.z, 3.6, 3.6)
@@ -539,6 +580,7 @@ func _scenery() -> void:
 	for q in quads:
 		q.instance(root, mat_solid, false)
 	var hills = MB.new()
+	hills.m = 0.0
 	for k in 16:
 		var a := TAU * k / 16.0 + rng.randf() * 0.2
 		var dist := rng.randf_range(430.0, 560.0)
@@ -576,9 +618,12 @@ func _room_begin(kind: String, rname: String, idx: int, w: float, d: float, floo
 	sh.push(o)
 	f.push(o)
 	g.push(o)
+	g.m = 0.5
 	sh.flat(Vector3(0, -0.15, 0), 80, 70, Color(0.09, 0.09, 0.13))
+	sh.m = 0.6 if tiles else 0.5
 	sh.box(Vector3(0, -0.1, 0), Vector3(w, 0.2, d), floorc)
-	if tiles:
+	sh.m = 0.2
+	if false:
 		var tx := int(w / 2.0)
 		var tz := int(d / 2.0)
 		for a in tx:
@@ -601,6 +646,7 @@ func _room_begin(kind: String, rname: String, idx: int, w: float, d: float, floo
 	add_col(o.x, o.z + hd + 0.5, w + 2.0, 1.0)
 	add_col(o.x - hw - 0.5, o.z, 1.0, d + 2.0)
 	add_col(o.x + hw + 0.5, o.z, 1.0, d + 2.0)
+	sh.m = 1.0
 	sh.flat(Vector3(0, FY + 0.012, hd - 0.8), 2.4, 1.3, Color(0.2, 0.55, 0.32))
 	rooms[kind] = {"origin": o, "w": w, "d": d, "name": rname, "spawn": o + Vector3(0, 0, hd - 2.0)}
 	spots.append({"pos": o + Vector3(0, 0, hd - 0.8), "label": "Salir a la calle", "id": "salir", "room": kind})
@@ -705,15 +751,19 @@ func _tv(f, x: float, z: float, rot: float, size: float) -> void:
 func _plant(f, x: float, z: float, sc: float = 1.0) -> void:
 	var p := Vector3(x, FY, z)
 	f.cyl(p, 0.2 * sc, 0.28 * sc, 0.45 * sc, Color(0.75, 0.42, 0.3), 8)
-	f.sphere(p + Vector3(0, 0.95, 0) * sc, Vector3(0.45, 0.55, 0.45) * sc, Color(0.2, 0.55, 0.25), 7, 5)
-	f.sphere(p + Vector3(0.2, 1.3, 0.1) * sc, Vector3(0.3, 0.35, 0.3) * sc, Color(0.28, 0.62, 0.3), 6, 4)
+	f.m = 0.7
+	f.sphere(p + Vector3(0, 0.95, 0) * sc, Vector3(0.45, 0.55, 0.45) * sc, Color(0.2, 0.55, 0.25), 9, 6, 0.2)
+	f.sphere(p + Vector3(0.2, 1.3, 0.1) * sc, Vector3(0.3, 0.35, 0.3) * sc, Color(0.28, 0.62, 0.3), 8, 5, 0.2)
+	f.m = 1.0
 
 
 func _floor_lamp(f, g, x: float, z: float) -> void:
 	var p := Vector3(x, FY, z)
 	f.cyl(p, 0.2, 0.2, 0.04, C_DARK, 8)
 	f.cyl(p, 0.025, 0.025, 1.5, C_DARK, 5, false)
+	g.m = 1.0
 	g.cyl(p + Vector3(0, 1.45, 0), 0.28, 0.16, 0.36, Color.WHITE, 8)
+	g.m = 0.5
 
 
 func _rug(f, x: float, z: float, sx: float, sz: float, col: Color) -> void:
@@ -723,7 +773,9 @@ func _rug(f, x: float, z: float, sx: float, sz: float, col: Color) -> void:
 
 func _bookcase(f, x: float, z: float, rot: float, length: float) -> void:
 	f.push(Vector3(x, FY, z), rot)
+	f.m = 0.5
 	f.box(Vector3.ZERO, Vector3(length, 2.0, 0.4), C_WOOD)
+	f.m = 1.0
 	for lvl in 4:
 		f.box(Vector3(0, 0.1 + lvl * 0.47, 0.19), Vector3(length - 0.12, 0.38, 0.03), C_WOOD.darkened(0.4))
 		var k := 0
