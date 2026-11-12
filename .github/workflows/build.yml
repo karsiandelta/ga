@@ -1,0 +1,105 @@
+name: Compilar Ciudad Mirasol
+
+on:
+  push:
+    branches: [mirasol-ciudad]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_TAG: 4.3-stable
+  GODOT_DIR: 4.3.stable
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Caché de Godot
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot-bin
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_TAG }}-android-v1
+
+      - name: Descargar Godot y plantillas de exportación
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p ~/godot-bin ~/dl ~/.local/share/godot/export_templates/$GODOT_DIR
+          cd ~/dl
+          curl -L --retry 3 -o godot.zip https://github.com/godotengine/godot/releases/download/$GODOT_TAG/Godot_v${GODOT_TAG}_linux.x86_64.zip
+          curl -L --retry 3 -o tpl.zip https://github.com/godotengine/godot/releases/download/$GODOT_TAG/Godot_v${GODOT_TAG}_export_templates.tpz
+          unzip -q godot.zip
+          mv Godot_v${GODOT_TAG}_linux.x86_64 ~/godot-bin/godot
+          chmod +x ~/godot-bin/godot
+          unzip -q tpl.zip
+          mv templates/android_debug.apk templates/android_release.apk templates/android_source.zip templates/version.txt ~/.local/share/godot/export_templates/$GODOT_DIR/
+          rm -rf ~/dl
+
+      - name: Configurar Godot para Android
+        run: |
+          set -e
+          mkdir -p ~/.config/godot
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $BT"
+          for f in editor_settings-4.3.tres editor_settings-4.tres; do
+          cat > ~/.config/godot/$f <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$GITHUB_WORKSPACE/android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+          done
+          cat ~/.config/godot/editor_settings-4.3.tres
+
+      - name: Importar el proyecto
+        run: ~/godot-bin/godot --headless --import 2>&1 | tee import.log || true
+
+      - name: Probar el juego (lógica, puertas, acciones)
+        run: |
+          CM_TEST=1 timeout 300 ~/godot-bin/godot --headless --fixed-fps 30 2>&1 | grep -v -e 'Parameter "m" is null' -e 'mesh_get_surface_count' | tee test.log || true
+          if grep -qE "SCRIPT ERROR|Parse Error|Failed to load script|CM_FALLO" test.log; then echo "::error::Errores en la prueba"; exit 1; fi
+          grep -q "CM_TEST_OK" test.log
+
+      - name: Render real (comprueba que dibuja sin errores)
+        run: |
+          mkdir -p shots && touch shots/.gdignore
+          which xvfb-run || (sudo apt-get update -qq; sudo apt-get install -y -qq xvfb > /dev/null) || true
+          CM_TEST=1 CM_SHOTS=$PWD/shots LIBGL_ALWAYS_SOFTWARE=1 timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot-bin/godot --resolution 1280x720 --fixed-fps 30 > render.log 2>&1 || true
+          grep -E "ERROR|WARNING|OpenGL|CM_" render.log | head -40 || true
+          ls -la shots
+          if grep -qE "SHADER ERROR|SCRIPT ERROR|Shader compilation failed" render.log; then echo "::error::Errores de render"; exit 1; fi
+          grep -q "CM_TEST_OK" render.log
+
+      - name: Exportar APK
+        run: |
+          set -e
+          mkdir -p build
+          sed -i "s/^version\/code=.*/version\/code=${{ github.run_number }}/; s/^version\/name=.*/version\/name=\"0.${{ github.run_number }}\"/" export_presets.cfg
+          ~/godot-bin/godot --headless --verbose --export-debug "Android" build/CiudadMirasol.apk 2>&1 | tee export.log | tail -60
+          ls -la build
+          test -s build/CiudadMirasol.apk
+
+      - name: Publicar para descargar desde el móvil
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mirasol-ciudad-v${{ github.run_number }}
+          name: Ciudad Mirasol v${{ github.run_number }}
+          target_commitish: mirasol-ciudad
+          body: Descarga CiudadMirasol.apk desde el móvil e instálalo.
+          files: build/CiudadMirasol.apk

@@ -1,0 +1,133 @@
+extends RefCounted
+# Personas y vehículos generados por código.
+
+const MB = preload("res://mb.gd")
+
+const SKINS := [Color(0.98, 0.84, 0.72), Color(0.93, 0.74, 0.58), Color(0.78, 0.58, 0.42), Color(0.55, 0.38, 0.27), Color(0.4, 0.27, 0.2)]
+const HAIRS := [Color(0.12, 0.09, 0.07), Color(0.32, 0.2, 0.1), Color(0.6, 0.42, 0.2), Color(0.85, 0.72, 0.4), Color(0.55, 0.15, 0.1), Color(0.75, 0.75, 0.78)]
+const SHIRTS := [Color(0.85, 0.25, 0.25), Color(0.2, 0.5, 0.85), Color(0.95, 0.8, 0.25), Color(0.3, 0.7, 0.45), Color(0.95, 0.95, 0.95), Color(0.6, 0.35, 0.75), Color(0.95, 0.55, 0.2), Color(0.25, 0.3, 0.4), Color(0.95, 0.55, 0.7), Color(0.2, 0.65, 0.7)]
+const PANTS := [Color(0.2, 0.25, 0.4), Color(0.15, 0.15, 0.18), Color(0.45, 0.38, 0.3), Color(0.3, 0.4, 0.6), Color(0.6, 0.6, 0.62), Color(0.35, 0.2, 0.2)]
+const CAR_COLS := [Color(0.8, 0.15, 0.15), Color(0.15, 0.35, 0.75), Color(0.92, 0.92, 0.94), Color(0.15, 0.16, 0.18), Color(0.55, 0.58, 0.62), Color(0.2, 0.55, 0.35), Color(0.95, 0.6, 0.15), Color(0.5, 0.75, 0.9)]
+
+
+static func person(mat: Material, skin: Color, shirt: Color, pants: Color, hair: Color, female: bool) -> Node3D:
+	var root := Node3D.new()
+	var b = MB.new()
+	b.cyl(Vector3(0, 0.86, 0), 0.19, 0.23, 0.58, shirt, 8)
+	b.cyl(Vector3(0, 0.78, 0), 0.2, 0.19, 0.1, pants, 8, false)
+	b.cyl(Vector3(0, 1.43, 0), 0.07, 0.07, 0.09, skin, 6, false)
+	b.sphere(Vector3(0, 1.64, 0), Vector3(0.17, 0.19, 0.17), skin, 10, 6)
+	b.sphere(Vector3(0, 1.7, -0.035), Vector3(0.185, 0.165, 0.185), hair, 10, 5)
+	if female:
+		b.sphere(Vector3(0, 1.53, -0.1), Vector3(0.17, 0.25, 0.1), hair, 8, 5)
+	var dark := Color(0.08, 0.08, 0.1)
+	b.box(Vector3(-0.065, 1.63, 0.158), Vector3(0.035, 0.045, 0.02), dark)
+	b.box(Vector3(0.065, 1.63, 0.158), Vector3(0.035, 0.045, 0.02), dark)
+	b.box(Vector3(0, 1.56, 0.16), Vector3(0.07, 0.015, 0.02), Color(0.7, 0.3, 0.3))
+	b.instance(root, mat)
+	var limbs: Array = []
+	for s in [-1.0, 1.0]:
+		var leg := Node3D.new()
+		leg.position = Vector3(0.1 * s, 0.84, 0)
+		root.add_child(leg)
+		var lb = MB.new()
+		lb.cyl(Vector3(0, -0.78, 0), 0.075, 0.1, 0.78, pants, 6, false)
+		lb.box(Vector3(0, -0.84, 0.04), Vector3(0.13, 0.09, 0.27), Color(0.15, 0.13, 0.12))
+		lb.instance(leg, mat)
+		limbs.append(leg)
+	for s in [-1.0, 1.0]:
+		var arm := Node3D.new()
+		arm.position = Vector3(0.29 * s, 1.4, 0)
+		root.add_child(arm)
+		var ab = MB.new()
+		ab.cyl(Vector3(0, -0.3, 0), 0.06, 0.075, 0.32, shirt, 6, false)
+		ab.cyl(Vector3(0, -0.56, 0), 0.05, 0.058, 0.26, skin, 6, false)
+		ab.sphere(Vector3(0, -0.6, 0), Vector3(0.06, 0.07, 0.06), skin, 6, 4)
+		ab.instance(arm, mat)
+		limbs.append(arm)
+	root.set_meta("limbs", limbs)
+	return root
+
+
+static func random_person(mat: Material, rng: RandomNumberGenerator) -> Node3D:
+	return person(mat, SKINS[rng.randi() % SKINS.size()], SHIRTS[rng.randi() % SHIRTS.size()], PANTS[rng.randi() % PANTS.size()], HAIRS[rng.randi() % HAIRS.size()], rng.randf() < 0.5)
+
+
+static func animate(root: Node3D, phase: float, amt: float) -> void:
+	var limbs: Array = root.get_meta("limbs")
+	var s := sin(phase) * amt
+	limbs[0].rotation.x = s * 0.75
+	limbs[1].rotation.x = -s * 0.75
+	limbs[2].rotation.x = -s * 0.55
+	limbs[3].rotation.x = s * 0.55
+
+
+static func plumbob() -> MeshInstance3D:
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.emission_enabled = true
+	m.emission = Color(0.2, 1.0, 0.35)
+	m.emission_energy_multiplier = 1.2
+	m.roughness = 0.2
+	var b = MB.new()
+	var g := Color(0.3, 0.95, 0.4)
+	b.cyl(Vector3(0, 0.2, 0), 0.13, 0.0, 0.2, g, 6, false)
+	b.push_t(Transform3D(Basis(Vector3(1, 0, 0), PI), Vector3(0, 0.2, 0)))
+	b.cyl(Vector3.ZERO, 0.13, 0.0, 0.2, g, 6, false)
+	b.pop()
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.build(m)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
+static func _wheel(b, x: float, z: float, r: float, side: float) -> void:
+	# side = +1 rueda derecha (tapa hacia +x), -1 izquierda
+	var rot := -PI / 2.0 if side > 0.0 else PI / 2.0
+	b.push_t(Transform3D(Basis(Vector3(0, 0, 1), rot), Vector3(x - side * 0.26, r, z)))
+	b.cyl(Vector3.ZERO, r, r, 0.26, Color(0.1, 0.1, 0.11), 10)
+	b.cyl(Vector3(0, 0.26, 0), r * 0.55, r * 0.5, 0.02, Color(0.7, 0.72, 0.75), 8)
+	b.pop()
+
+
+# kind: 0 coche, 1 taxi, 2 autobús. El frente mira a +z.
+static func car(mat: Material, glow: Material, col: Color, kind: int) -> Node3D:
+	var root := Node3D.new()
+	var b = MB.new()
+	var g = MB.new()
+	var glass := Color(0.13, 0.18, 0.26)
+	if kind == 2:
+		var bl := 9.0
+		var bw := 2.4
+		b.box(Vector3(0, 0.35, 0), Vector3(bw, 2.5, bl), col, true)
+		b.box(Vector3(0, 2.85, 0), Vector3(bw - 0.2, 0.12, bl - 0.4), Color(0.9, 0.9, 0.9))
+		for s in [-1.0, 1.0]:
+			b.box(Vector3(s * (bw * 0.5 + 0.01), 1.5, -0.2), Vector3(0.04, 0.9, bl - 1.6), glass)
+			for z in [-3.0, 3.0]:
+				_wheel(b, s * bw * 0.5, z, 0.45, s)
+		b.box(Vector3(0, 1.4, bl * 0.5 + 0.01), Vector3(bw - 0.3, 1.1, 0.04), glass)
+		b.box(Vector3(0, 1.5, -bl * 0.5 - 0.01), Vector3(bw - 0.5, 0.8, 0.04), glass)
+		b.box(Vector3(-0.8, 0.6, -bl * 0.5 - 0.02), Vector3(0.3, 0.2, 0.04), Color(0.85, 0.1, 0.1))
+		b.box(Vector3(0.8, 0.6, -bl * 0.5 - 0.02), Vector3(0.3, 0.2, 0.04), Color(0.85, 0.1, 0.1))
+		g.box(Vector3(-0.8, 0.6, bl * 0.5 + 0.02), Vector3(0.35, 0.22, 0.05), Color.WHITE)
+		g.box(Vector3(0.8, 0.6, bl * 0.5 + 0.02), Vector3(0.35, 0.22, 0.05), Color.WHITE)
+	else:
+		var l := 4.2
+		var w := 1.8
+		b.box(Vector3(0, 0.3, 0), Vector3(w, 0.55, l), col, true)
+		b.box(Vector3(0, 0.85, -0.25), Vector3(w - 0.22, 0.48, l * 0.5), glass)
+		b.box(Vector3(0, 1.33, -0.25), Vector3(w - 0.16, 0.07, l * 0.5 + 0.06), col)
+		for sx in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				b.box(Vector3(sx * (w * 0.5 - 0.13), 0.85, -0.25 + sz * l * 0.25), Vector3(0.08, 0.48, 0.08), col)
+			_wheel(b, sx * w * 0.5, 1.3, 0.33, sx)
+			_wheel(b, sx * w * 0.5, -1.3, 0.33, sx)
+			b.box(Vector3(sx * 0.6, 0.55, -l * 0.5 - 0.02), Vector3(0.35, 0.16, 0.04), Color(0.85, 0.1, 0.1))
+			g.box(Vector3(sx * 0.6, 0.55, l * 0.5 + 0.01), Vector3(0.35, 0.16, 0.05), Color.WHITE)
+		b.box(Vector3(0, 0.3, l * 0.5 + 0.02), Vector3(w - 0.1, 0.18, 0.1), Color(0.2, 0.2, 0.22))
+		b.box(Vector3(0, 0.3, -l * 0.5 - 0.02), Vector3(w - 0.1, 0.18, 0.1), Color(0.2, 0.2, 0.22))
+		if kind == 1:
+			b.box(Vector3(0, 1.4, -0.25), Vector3(0.6, 0.18, 0.25), Color(0.1, 0.1, 0.1))
+	b.instance(root, mat)
+	g.instance(root, glow, false)
+	return root
