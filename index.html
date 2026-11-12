@@ -222,17 +222,9 @@ var $ = function(id){ return document.getElementById(id); };
 
 /* ---------- Mapa ---------- */
 var map = L.map("map", {zoomControl:false, attributionControl:true}).setView([38.9925,-1.8556], 15);
-var tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-  maxZoom:20, subdomains:"abcd",
-  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
-var tileFails = 0, swapped = false;
-tiles.on("tileerror", function(){
-  if(swapped || ++tileFails < 4) return;
-  swapped = true; map.removeLayer(tiles);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19,
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
-});
 setTimeout(function(){ map.invalidateSize(); }, 300);
 var trailLine = L.polyline(S.trail, {color:"#e2502b", weight:5, opacity:.85, lineJoin:"round"}).addTo(map);
 var meMarker = null, accCircle = null, hintCircle = null, foundLayer = L.layerGroup().addTo(map);
