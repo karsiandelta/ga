@@ -6,36 +6,28 @@
 <meta name="theme-color" content="#14262b">
 <title>El Tesoro de Albacete</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Figtree:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
-/* Mapa a pantalla completa; arriba una barra flotante de progreso, abajo la hoja con la pista. */
+/* Mapa 3D a pantalla completa; arriba la barra de progreso, a la derecha los mandos del mapa, abajo la pista. */
 :root{
-  --tinta:#14262b;      /* fondo de paneles */
-  --tinta-2:#1e383f;
-  --papel:#f3efe4;      /* texto sobre tinta */
-  --suave:#a9bcc0;
-  --azafran:#f2a516;    /* acento: azafrán de La Mancha */
-  --brasa:#e2502b;      /* "te quemas" */
-  --hielo:#58b7d6;      /* "helado" */
-  --ok:#5fcf8e;
+  --tinta:#14262b; --tinta-2:#1e383f; --papel:#f3efe4; --suave:#a9bcc0;
+  --azafran:#f2a516; --brasa:#e2502b; --hielo:#58b7d6; --ok:#5fcf8e;
   --display:"Fraunces",Georgia,"Times New Roman",serif;
   --texto:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{background:var(--tinta);color:var(--papel);font:16px/1.45 var(--texto);overflow:hidden;
-  -webkit-tap-highlight-color:transparent}
+body{background:var(--tinta);color:var(--papel);font:16px/1.45 var(--texto);overflow:hidden;-webkit-tap-highlight-color:transparent}
 #map{position:fixed;inset:0;background:#dfe6e4}
 button{font:inherit;color:inherit;cursor:pointer;border:0}
 button:focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
+[hidden]{display:none!important}
 
-/* Barra superior */
-.top{position:fixed;z-index:1100;left:0;right:0;top:0;display:flex;gap:8px;align-items:stretch;
-  padding:calc(10px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px));
-  pointer-events:none}
-.pill{pointer-events:auto;background:var(--tinta);border-radius:14px;padding:8px 12px;
-  box-shadow:0 4px 14px rgba(0,0,0,.3);display:flex;flex-direction:column;justify-content:center;min-width:0}
+.top{position:fixed;z-index:20;left:0;right:0;top:0;display:flex;gap:8px;align-items:stretch;
+  padding:calc(10px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px));pointer-events:none}
+.pill{pointer-events:auto;background:var(--tinta);border-radius:14px;padding:8px 12px;box-shadow:0 4px 14px rgba(0,0,0,.3);
+  display:flex;flex-direction:column;justify-content:center;min-width:0}
 .pill small{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--suave)}
 .pill b{font-size:17px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pill.grow{flex:1}
@@ -43,21 +35,28 @@ button:focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
 .dots i{flex:1;height:6px;border-radius:3px;background:var(--tinta-2)}
 .dots i.done{background:var(--azafran)}
 .dots i.now{background:var(--papel)}
-.iconbtn{pointer-events:auto;width:48px;border-radius:14px;background:var(--tinta);font-size:20px;
-  box-shadow:0 4px 14px rgba(0,0,0,.3)}
-.iconbtn.on{background:var(--azafran);color:var(--tinta)}
 
-/* Botones flotantes del mapa */
-.side{position:fixed;z-index:1100;right:max(12px,env(safe-area-inset-right,0px));top:calc(84px + env(safe-area-inset-top,0px));
+.side{position:fixed;z-index:20;right:max(12px,env(safe-area-inset-right,0px));top:calc(84px + env(safe-area-inset-top,0px));
   display:flex;flex-direction:column;gap:8px}
-.side .iconbtn{height:48px}
+.iconbtn{width:48px;height:48px;border-radius:14px;background:var(--tinta);font-size:13px;font-weight:700;
+  box-shadow:0 4px 14px rgba(0,0,0,.3);display:grid;place-items:center}
+.iconbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.iconbtn.on{background:var(--azafran);color:var(--tinta)}
+.toast{position:fixed;z-index:25;left:50%;top:calc(84px + env(safe-area-inset-top,0px));transform:translateX(-50%);
+  background:var(--tinta);padding:8px 14px;border-radius:999px;font-size:14px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.3);
+  opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
 
-/* Hoja inferior */
-.sheet{position:fixed;z-index:1100;left:0;right:0;bottom:0;background:var(--tinta);
-  border-radius:22px 22px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.35);
+.sheet{position:fixed;z-index:20;left:0;right:0;bottom:0;background:var(--tinta);border-radius:22px 22px 0 0;
+  box-shadow:0 -6px 24px rgba(0,0,0,.35);
   padding:16px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
   max-height:58%;overflow:auto}
+.sheethead{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .eyebrow{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--azafran);font-weight:700}
+.gps{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--tinta-2);color:var(--suave);white-space:nowrap}
+.gps.good{color:var(--tinta);background:var(--ok)}
+.gps.mid{color:var(--tinta);background:var(--azafran)}
+.gps.bad{color:#fff;background:var(--brasa)}
 .clue{font:600 20px/1.3 var(--display);margin:6px 0 12px;text-wrap:balance}
 .heat{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .bar{flex:1;height:10px;border-radius:5px;background:var(--tinta-2);overflow:hidden}
@@ -70,8 +69,7 @@ button:focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
 .note{font-size:13px;color:var(--suave);margin:10px 0 0}
 .note.alert{color:var(--azafran)}
 
-/* Pantallas superpuestas */
-.overlay{position:fixed;z-index:1200;inset:0;background:rgba(10,22,25,.82);display:flex;align-items:flex-end;justify-content:center}
+.overlay{position:fixed;z-index:40;inset:0;background:rgba(10,22,25,.82);display:flex;align-items:flex-end;justify-content:center}
 .card{background:var(--tinta);width:100%;max-width:520px;border-radius:24px 24px 0 0;
   padding:26px max(20px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));
   max-height:92%;overflow:auto}
@@ -84,49 +82,59 @@ button:focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
 .stats div{background:var(--tinta-2);border-radius:12px;padding:10px;text-align:center}
 .stats b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
 .stats small{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--suave)}
-[hidden]{display:none!important}
 
 /* Marcadores */
-.me{width:22px;height:22px;border-radius:50%;background:var(--brasa);border:3px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.25)}
-.me::after{content:"";position:absolute;inset:-9px;border-radius:50%;border:2px solid var(--brasa);opacity:.7;animation:pulso 1.8s ease-out infinite}
+.me{width:26px;height:26px;position:relative}
+.me .dot{position:absolute;inset:2px;border-radius:50%;background:var(--brasa);border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.me .ring{position:absolute;inset:-8px;border-radius:50%;border:2px solid var(--brasa);opacity:.7;animation:pulso 1.8s ease-out infinite}
+.me .cone{position:absolute;left:50%;bottom:50%;width:64px;height:64px;margin-left:-32px;
+  background:conic-gradient(from -28deg at 50% 100%,rgba(226,80,43,.55) 0deg,rgba(226,80,43,.55) 56deg,transparent 56deg);
+  border-radius:50% 50% 0 0;-webkit-mask:linear-gradient(to top,#000,transparent);mask:linear-gradient(to top,#000,transparent)}
 @keyframes pulso{to{transform:scale(1.9);opacity:0}}
-.flag{width:30px;height:30px;border-radius:50% 50% 50% 4px;background:var(--azafran);color:var(--tinta);border:2px solid var(--tinta);
-  display:grid;place-items:center;font:700 14px var(--texto);transform:rotate(-45deg)}
-.flag span{transform:rotate(45deg)}
-.leaflet-control-attribution{font-size:10px}
-.leaflet-bottom{bottom:var(--sheet-h,0px)}
-@media (prefers-reduced-motion:reduce){.me::after{animation:none}.bar span{transition:none}}
+.pin{width:34px;height:42px;cursor:pointer}
+.pin i{display:grid;place-items:center;width:34px;height:34px;border-radius:50% 50% 50% 4px;background:var(--azafran);
+  border:2px solid var(--tinta);transform:rotate(-45deg);box-shadow:0 3px 8px rgba(0,0,0,.4);font-style:normal}
+.pin b{transform:rotate(45deg);color:var(--tinta);font:700 15px var(--texto)}
+.pin.new i{animation:cae .6s cubic-bezier(.2,1.6,.4,1)}
+@keyframes cae{from{transform:rotate(-45deg) translate(40px,-40px);opacity:0}}
+.maplibregl-popup-content{background:var(--tinta);color:var(--papel);border-radius:14px;padding:12px 14px;font:14px/1.4 var(--texto);max-width:240px;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+.maplibregl-popup-content b{display:block;font:800 17px var(--display);margin-bottom:4px}
+.maplibregl-popup-tip{border-top-color:var(--tinta)!important;border-bottom-color:var(--tinta)!important}
+.maplibregl-popup-close-button{color:var(--papel);font-size:18px;padding:2px 8px}
+.maplibregl-ctrl-bottom-left{bottom:var(--sheet-h,0px)}
+@media (prefers-reduced-motion:reduce){.me .ring,.pin.new i{animation:none}.bar span{transition:none}}
 </style>
 </head>
 <body>
 <div id="map"></div>
 
 <div class="top">
-  <div class="pill grow">
-    <small id="progTxt">Pista 1 de 6</small>
-    <div class="dots" id="dots"></div>
-  </div>
+  <div class="pill grow"><small id="progTxt">Pista 1 de 6</small><div class="dots" id="dots"></div></div>
   <div class="pill"><small>Tiempo</small><b id="time">00:00</b></div>
   <div class="pill"><small>Andado</small><b id="walk">0 m</b></div>
 </div>
 
 <div class="side">
-  <button class="iconbtn on" id="followBtn" aria-label="Seguir mi posición" title="Seguir mi posición">◎</button>
-  <button class="iconbtn" id="menuBtn" aria-label="Opciones" title="Opciones">⋯</button>
+  <button class="iconbtn on" id="followBtn" aria-label="Seguir mi posición"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg></button>
+  <button class="iconbtn on" id="tiltBtn" aria-label="Vista 3D o plana">3D</button>
+  <button class="iconbtn" id="layerBtn" aria-label="Cambiar tipo de mapa"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
+  <button class="iconbtn" id="routeBtn" aria-label="Ver todo mi recorrido"><svg viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 000-6H9a3 3 0 010-6h7"/></svg></button>
+  <button class="iconbtn" id="menuBtn" aria-label="Opciones"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></button>
 </div>
+<div class="toast" id="toast"></div>
 
 <div class="sheet" id="sheet">
-  <div class="eyebrow" id="eyebrow">Pista 1</div>
+  <div class="sheethead"><div class="eyebrow" id="eyebrow">Pista 1</div><div class="gps" id="gps">GPS</div></div>
   <div class="clue" id="clue"></div>
   <div class="heat"><div class="bar"><span id="heatBar"></span></div><b id="heatTxt">Sin señal</b></div>
   <div class="row">
     <button class="btn" id="hintBtn">Pedir ayuda (+2 min)</button>
     <button class="btn main" id="hereBtn" hidden>Estoy delante</button>
+    <button class="btn main" id="retryBtn" hidden>Reintentar ubicación</button>
   </div>
-  <p class="note" id="note"></p>
+  <p class="note" id="note" hidden></p>
 </div>
 
-<!-- Inicio -->
 <div class="overlay" id="intro">
   <div class="card">
     <div class="eyebrow">Búsqueda del tesoro · 6 pistas · 2 km a pie</div>
@@ -135,17 +143,16 @@ button:focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
     <ul>
       <li>Lee la pista y ve andando al sitio. El termómetro te dice si te acercas.</li>
       <li>Al llegar (a unos 30 m) se desbloquea la siguiente.</li>
-      <li>Si te atascas, pide ayuda: verás una zona en el mapa, pero suma 2 minutos.</li>
+      <li>Gira e inclina el mapa con dos dedos. Toca las banderas para releer cada sitio.</li>
     </ul>
     <div class="row">
       <button class="btn main" id="startBtn">Empezar con mi GPS</button>
       <button class="btn" id="demoStartBtn">Probar desde casa</button>
     </div>
-    <p class="note" id="introNote"></p>
+    <p class="note" id="introNote" hidden></p>
   </div>
 </div>
 
-<!-- Sitio encontrado -->
 <div class="overlay" id="found" hidden>
   <div class="card">
     <div class="eyebrow" id="foundEyebrow">Encontrado</div>
@@ -155,7 +162,6 @@ button:focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
   </div>
 </div>
 
-<!-- Final -->
 <div class="overlay" id="end" hidden>
   <div class="card">
     <div class="eyebrow">Tesoro encontrado</div>
@@ -173,7 +179,6 @@ button:focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
   </div>
 </div>
 
-<!-- Opciones -->
 <div class="overlay" id="menu" hidden>
   <div class="card">
     <div class="eyebrow">Opciones</div>
@@ -210,63 +215,142 @@ var STOPS = [
     fact:"Estás en el parque Abelardo Sánchez, el pulmón verde del centro, delante del Museo de Albacete. Aquí acaba la búsqueda." }
 ];
 var RADIUS = 30, NEAR = 120, HINT_RADIUS = 130, PENALTY = 120000, KEY = "tesoro-albacete-v1";
+var CENTER = [-1.8556, 38.9925];
+
+/* ---------- Tipos de mapa ---------- */
+function rasterStyle(url, attr, maxzoom){
+  return {version:8, sources:{base:{type:"raster", tiles:[url], tileSize:256, maxzoom:maxzoom, attribution:attr}},
+          layers:[{id:"base", type:"raster", source:"base"}]};
+}
+var BASES = [
+  {name:"Mapa 3D", style:"https://tiles.openfreemap.org/styles/liberty"},
+  {name:"Satélite", style:rasterStyle("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", "Imágenes &copy; Esri, Maxar, Earthstar Geographics", 19)},
+  {name:"Callejero clásico", style:rasterStyle("https://tile.openstreetmap.org/{z}/{x}/{y}.png", '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', 19)}
+];
 
 /* ---------- Estado ---------- */
 function fresh(){ return {idx:0, started:0, finished:0, hints:0, penalty:0, trail:[], dist:0, hintOn:false}; }
 function load(){ try{ var s = JSON.parse(localStorage.getItem(KEY)); if(s && typeof s.idx==="number") return s; }catch(e){} return null; }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 var S = load() || fresh();
-var demo = false, follow = true, pos = null, watchId = null, pendingFound = false;
-
+var demo = false, follow = true, tilt = true, baseIdx = 0, pos = null, acc = 0, heading = null;
+var watchId = null, highMode = true, gotFix = false, retryTimer = null, pendingFound = false, styleReady = false;
+var map = null, meMarker = null, pins = [];
 var $ = function(id){ return document.getElementById(id); };
-
-/* ---------- Mapa ---------- */
-var map = L.map("map", {zoomControl:false, attributionControl:true}).setView([38.9925,-1.8556], 15);
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-}).addTo(map);
-setTimeout(function(){ map.invalidateSize(); }, 300);
-var trailLine = L.polyline(S.trail, {color:"#e2502b", weight:5, opacity:.85, lineJoin:"round"}).addTo(map);
-var meMarker = null, accCircle = null, hintCircle = null, foundLayer = L.layerGroup().addTo(map);
-map.on("dragstart", function(){ setFollow(false); });
-map.on("click", function(e){ if(demo) onPosition(e.latlng.lat, e.latlng.lng, 5); });
-
-function setFollow(v){ follow = v; $("followBtn").classList.toggle("on", v); if(v && pos) map.panTo(pos); }
-$("followBtn").onclick = function(){ setFollow(!follow); };
-
-function drawFound(){
-  foundLayer.clearLayers();
-  for(var i=0;i<S.idx && i<STOPS.length;i++){
-    var st = STOPS[i];
-    L.marker([st.lat,st.lng], {icon:L.divIcon({className:"", html:'<div class="flag"><span>'+(i+1)+'</span></div>', iconSize:[30,30], iconAnchor:[4,30]})})
-      .bindPopup("<b>"+st.name+"</b>").addTo(foundLayer);
-  }
-}
-function drawHint(){
-  if(hintCircle){ map.removeLayer(hintCircle); hintCircle = null; }
-  if(S.hintOn && S.idx < STOPS.length){
-    var st = STOPS[S.idx];
-    hintCircle = L.circle([st.lat+st.hint[0], st.lng+st.hint[1]], {radius:HINT_RADIUS, color:"#f2a516", weight:2, dashArray:"6 6", fillColor:"#f2a516", fillOpacity:.18}).addTo(map);
-  }
-}
 
 /* ---------- Utilidades ---------- */
 function meters(a,b,c,d){
   var R=6371000, p=Math.PI/180, x=(d-b)*p*Math.cos((a+c)/2*p), y=(c-a)*p;
   return Math.sqrt(x*x+y*y)*R;
 }
+function circlePoly(lat,lng,r){
+  var pts=[], dLat=r/111320, dLng=r/(111320*Math.cos(lat*Math.PI/180));
+  for(var i=0;i<=48;i++){ var a=i/48*2*Math.PI; pts.push([lng+dLng*Math.cos(a), lat+dLat*Math.sin(a)]); }
+  return {type:"Feature", geometry:{type:"Polygon", coordinates:[pts]}, properties:{}};
+}
+var EMPTY = {type:"FeatureCollection", features:[]};
 function fmtTime(ms){
   var s=Math.max(0,Math.floor(ms/1000)), h=Math.floor(s/3600), m=Math.floor(s%3600/60), ss=s%60;
   return (h? h+":"+String(m).padStart(2,"0") : String(m).padStart(2,"0"))+":"+String(ss).padStart(2,"0");
 }
 function fmtDist(m){ return m<1000 ? Math.round(m)+" m" : (m/1000).toFixed(2).replace(".",",")+" km"; }
 function elapsed(){ if(!S.started) return 0; return (S.finished||Date.now()) - S.started + S.penalty; }
+var toastTimer = null;
+function toast(t){ var el=$("toast"); el.textContent=t; el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ el.classList.remove("show"); }, 1800); }
+function setNote(t, alert){ var n=$("note"); n.textContent=t||""; n.classList.toggle("alert", !!alert); n.hidden=!t; syncSheet(); }
+function syncSheet(){
+  var h = $("sheet").offsetHeight;
+  document.documentElement.style.setProperty("--sheet-h", h+"px");
+  if(map) try{ map.setPadding({top:80, bottom:h, left:0, right:0}); }catch(e){}
+}
+
+/* ---------- Mapa ---------- */
+function initMap(){
+  if(!window.maplibregl){ setNote("No se ha podido cargar el mapa. Comprueba la conexión y recarga la página.", true); return; }
+  try{
+    map = new maplibregl.Map({container:"map", style:BASES[0].style, center:CENTER, zoom:15.2, pitch:55, bearing:-15,
+      maxPitch:70, attributionControl:false});
+  }catch(e){ map=null; setNote("Este navegador no puede dibujar el mapa. Ábrelo en Chrome.", true); return; }
+  map.addControl(new maplibregl.AttributionControl({compact:true}), "bottom-left");
+  map.on("style.load", function(){ styleReady = true; addOverlays(); updateOverlays(); });
+  map.on("dragstart", function(){ setFollow(false); });
+  map.on("click", function(e){ if(demo) onPosition(e.lngLat.lat, e.lngLat.lng, 5); });
+  /* Si el mapa 3D no responde, pasa solo al callejero clásico */
+  setTimeout(function(){ if(!styleReady && baseIdx===0){ baseIdx=2; map.setStyle(BASES[2].style); toast("Mapa clásico"); } }, 8000);
+  syncSheet(); drawPins(false);
+}
+function addOverlays(){
+  if(!map || map.getSource("trail")) return;
+  map.addSource("acc", {type:"geojson", data:EMPTY});
+  map.addSource("hint", {type:"geojson", data:EMPTY});
+  map.addSource("trail", {type:"geojson", data:EMPTY});
+  map.addLayer({id:"acc-fill", type:"fill", source:"acc", paint:{"fill-color":"#e2502b","fill-opacity":0.12}});
+  map.addLayer({id:"hint-fill", type:"fill", source:"hint", paint:{"fill-color":"#f2a516","fill-opacity":0.22}});
+  map.addLayer({id:"hint-line", type:"line", source:"hint", paint:{"line-color":"#f2a516","line-width":2.5,"line-dasharray":[2,2]}});
+  map.addLayer({id:"trail-glow", type:"line", source:"trail", layout:{"line-cap":"round","line-join":"round"},
+    paint:{"line-color":"#e2502b","line-width":12,"line-opacity":0.25,"line-blur":4}});
+  map.addLayer({id:"trail-line", type:"line", source:"trail", layout:{"line-cap":"round","line-join":"round"},
+    paint:{"line-color":"#e2502b","line-width":4.5}});
+}
+function updateOverlays(){
+  if(!map || !map.getSource("trail")) return;
+  map.getSource("trail").setData(S.trail.length>1 ? {type:"Feature", properties:{}, geometry:{type:"LineString",
+    coordinates:S.trail.map(function(p){ return [p[1],p[0]]; })}} : EMPTY);
+  map.getSource("acc").setData(pos && acc>12 ? circlePoly(pos[0],pos[1],acc) : EMPTY);
+  var st = STOPS[S.idx];
+  map.getSource("hint").setData(S.hintOn && st ? circlePoly(st.lat+st.hint[0], st.lng+st.hint[1], HINT_RADIUS) : EMPTY);
+}
+function drawPins(animateLast){
+  if(!map) return;
+  pins.forEach(function(m){ m.remove(); }); pins = [];
+  for(var i=0;i<S.idx && i<STOPS.length;i++){
+    var st=STOPS[i], el=document.createElement("div");
+    el.className = "pin"+(animateLast && i===S.idx-1 ? " new" : "");
+    el.innerHTML = "<i><b>"+(i+1)+"</b></i>";
+    var pop = new maplibregl.Popup({offset:38, maxWidth:"260px"}).setHTML("<b>"+st.name+"</b>"+st.fact);
+    pins.push(new maplibregl.Marker({element:el, anchor:"bottom"}).setLngLat([st.lng,st.lat]).setPopup(pop).addTo(map));
+  }
+}
+function drawMe(){
+  if(!map || !pos) return;
+  if(!meMarker){
+    var el=document.createElement("div"); el.className="me";
+    el.innerHTML='<div class="cone" hidden></div><div class="ring"></div><div class="dot"></div>';
+    meMarker = new maplibregl.Marker({element:el, rotationAlignment:"map", pitchAlignment:"map"}).setLngLat([pos[1],pos[0]]).addTo(map);
+  } else meMarker.setLngLat([pos[1],pos[0]]);
+  var cone = meMarker.getElement().querySelector(".cone");
+  cone.hidden = heading===null;
+  if(heading!==null) meMarker.setRotation(heading);
+}
+function setFollow(v){
+  follow = v; $("followBtn").classList.toggle("on", v);
+  if(v && pos && map) map.easeTo({center:[pos[1],pos[0]], zoom:Math.max(map.getZoom(),17), duration:700});
+}
+$("followBtn").onclick = function(){ setFollow(!follow); toast(follow ? "Siguiendo tu posición" : "Mapa libre"); };
+$("tiltBtn").onclick = function(){
+  tilt = !tilt; this.classList.toggle("on", tilt);
+  if(map) map.easeTo({pitch:tilt?55:0, bearing:tilt?map.getBearing():0, duration:600});
+  toast(tilt ? "Vista 3D" : "Vista plana, norte arriba");
+};
+$("layerBtn").onclick = function(){
+  if(!map) return;
+  baseIdx = (baseIdx+1) % BASES.length; map.setStyle(BASES[baseIdx].style); toast(BASES[baseIdx].name);
+};
+$("routeBtn").onclick = function(){ showRoute(); };
+function showRoute(){
+  if(!map) return;
+  var b = new maplibregl.LngLatBounds(), n=0;
+  S.trail.forEach(function(p){ b.extend([p[1],p[0]]); n++; });
+  for(var i=0;i<S.idx && i<STOPS.length;i++){ b.extend([STOPS[i].lng,STOPS[i].lat]); n++; }
+  if(pos){ b.extend([pos[1],pos[0]]); n++; }
+  if(n<2){ toast("Aún no hay recorrido"); return; }
+  setFollow(false); map.fitBounds(b, {padding:50, pitch:0, bearing:0, duration:900, maxZoom:17.5});
+}
 
 /* ---------- Pantalla ---------- */
 function render(){
-  var n = STOPS.length, done = S.idx >= n;
+  var n = STOPS.length, done = S.idx >= n, d = "";
   $("progTxt").textContent = done ? "Tesoro encontrado" : "Pista "+(S.idx+1)+" de "+n;
-  var d = "";
   for(var i=0;i<n;i++) d += '<i class="'+(i<S.idx?"done":(i===S.idx?"now":""))+'"></i>';
   $("dots").innerHTML = d;
   $("walk").textContent = fmtDist(S.dist);
@@ -274,23 +358,28 @@ function render(){
   if(!done){
     $("eyebrow").textContent = "Pista "+(S.idx+1);
     $("clue").textContent = STOPS[S.idx].clue;
-    $("hintBtn").hidden = false;
-    $("hintBtn").disabled = S.hintOn;
+    $("hintBtn").hidden = false; $("hintBtn").disabled = S.hintOn;
     $("hintBtn").textContent = S.hintOn ? "Zona marcada en el mapa" : "Pedir ayuda (+2 min)";
   } else {
     $("eyebrow").textContent = "Fin de la búsqueda";
     $("clue").textContent = "Has encontrado el tesoro. En el mapa queda dibujado todo tu recorrido.";
     $("hintBtn").hidden = true; $("hereBtn").hidden = true;
   }
-  drawFound(); drawHint(); updateHeat();
-  requestAnimationFrame(function(){
-    document.documentElement.style.setProperty("--sheet-h", $("sheet").offsetHeight+"px");
-  });
+  updateOverlays(); updateHeat(); syncSheet();
+}
+function updateGpsChip(){
+  var g=$("gps");
+  g.className = "gps";
+  if(demo){ g.textContent="Modo prueba"; return; }
+  if(!pos){ g.textContent="Buscando GPS…"; return; }
+  g.textContent = "GPS ±"+Math.round(acc)+" m";
+  g.classList.add(acc<=20 ? "good" : (acc<=60 ? "mid" : "bad"));
 }
 function updateHeat(){
   var bar=$("heatBar"), txt=$("heatTxt");
+  updateGpsChip();
   if(S.idx >= STOPS.length){ bar.style.width="100%"; bar.style.background="var(--ok)"; txt.textContent="Completado"; return; }
-  if(!pos){ bar.style.width="0"; txt.textContent = demo ? "Toca el mapa" : "Buscando GPS…"; $("hereBtn").hidden = true; return; }
+  if(!pos){ bar.style.width="0"; txt.textContent = demo ? "Toca el mapa" : "Sin posición"; $("hereBtn").hidden = true; return; }
   var st=STOPS[S.idx], d=meters(pos[0],pos[1],st.lat,st.lng), label, color;
   if(d>700){label="Helado";color="var(--hielo)";}
   else if(d>350){label="Frío";color="var(--hielo)";}
@@ -300,69 +389,109 @@ function updateHeat(){
   bar.style.width = Math.max(4, Math.min(100, 100*(1 - d/1200)))+"%";
   bar.style.background = color;
   txt.textContent = label+" · "+(d<1000 ? Math.round(d/10)*10+" m" : fmtDist(d));
-  $("hereBtn").hidden = !(d<=NEAR && S.started && !S.finished);
+  var showHere = d<=NEAR && S.started && !S.finished;
+  if($("hereBtn").hidden === showHere){ $("hereBtn").hidden = !showHere; syncSheet(); }
 }
 
 /* ---------- Posición ---------- */
-function onPosition(lat,lng,acc){
-  pos = [lat,lng];
-  if(!meMarker){
-    meMarker = L.marker(pos, {icon:L.divIcon({className:"", html:'<div class="me"></div>', iconSize:[22,22], iconAnchor:[11,11]}), zIndexOffset:1000}).addTo(map);
-    accCircle = L.circle(pos, {radius:acc, color:"#e2502b", weight:1, fillOpacity:.08}).addTo(map);
-    map.setView(pos, 17);
-  } else { meMarker.setLatLng(pos); accCircle.setLatLng(pos).setRadius(acc); }
-  if(follow) map.panTo(pos, {animate:true});
-
-  var weak = acc > 60;
-  setNote(weak ? "Señal GPS débil (±"+Math.round(acc)+" m). Sal a cielo abierto si puedes." : (demo ? "Modo prueba: toca el mapa para moverte." : ""), weak);
+function onPosition(lat,lng,a,hdg){
+  var first = !pos;
+  pos = [lat,lng]; acc = a; gotFix = true;
+  if(typeof hdg==="number" && !isNaN(hdg) && compassHeading===null) heading = hdg;
+  $("retryBtn").hidden = true;
+  drawMe();
+  if(map){
+    if(first) map.flyTo({center:[lng,lat], zoom:17.3, pitch:tilt?55:0, duration:1400});
+    else if(follow) map.easeTo({center:[lng,lat], duration:800});
+  }
+  var far = meters(lat,lng,CENTER[1],CENTER[0]) > 15000;
+  if(demo) setNote("Modo prueba: toca el mapa para moverte.", false);
+  else if(far) setNote("Estás lejos de Albacete. Para probarla desde aquí usa el modo prueba (botón de opciones).", true);
+  else if(a>60) setNote("Señal poco precisa (±"+Math.round(a)+" m). Sal a cielo abierto y espera unos segundos.", true);
+  else setNote("", false);
 
   if(S.started && !S.finished && !pendingFound){
     var last = S.trail[S.trail.length-1];
-    if(!last){ S.trail.push([lat,lng]); }
+    if(!last){ if(a<=40 || demo) S.trail.push([lat,lng]); }
     else {
       var step = meters(last[0],last[1],lat,lng);
-      if(step >= 5 && (acc <= 50 || demo)){ S.trail.push([lat,lng]); S.dist += step; }
+      if(step >= Math.max(5, demo?0:a*0.5) && (a <= 40 || demo)){ S.trail.push([lat,lng]); S.dist += step; }
     }
-    trailLine.setLatLngs(S.trail);
     var st = STOPS[S.idx];
-    if(meters(lat,lng,st.lat,st.lng) <= RADIUS && acc <= 60) arrive();
+    if(meters(lat,lng,st.lat,st.lng) <= RADIUS && a <= 50) arrive();
     save();
   }
   $("walk").textContent = fmtDist(S.dist);
-  updateHeat();
+  updateOverlays(); updateHeat();
 }
-function setNote(t, alert){ var n=$("note"); n.textContent=t; n.classList.toggle("alert", !!alert); n.hidden = !t;
-  document.documentElement.style.setProperty("--sheet-h", $("sheet").offsetHeight+"px"); }
-
+function geoOk(p){ if(!demo) onPosition(p.coords.latitude, p.coords.longitude, p.coords.accuracy||30, p.coords.speed>0.7 ? p.coords.heading : undefined); }
+function watch(high){
+  highMode = high;
+  watchId = navigator.geolocation.watchPosition(geoOk, function(err){
+    if(demo) return;
+    if(err.code===1){
+      stopGps(); $("retryBtn").hidden = false;
+      setNote("El navegador tiene bloqueada la ubicación. Toca el candado junto a la dirección, permite «Ubicación» y pulsa Reintentar.", true);
+    } else if(high){
+      /* El GPS preciso tarda: mientras tanto usa la posición aproximada por red */
+      stopGps(); watch(false);
+      clearTimeout(retryTimer); retryTimer = setTimeout(function(){ if(!demo){ stopGps(); watch(true); } }, 25000);
+      if(!gotFix) setNote("El GPS tarda en responder. Comprueba que la ubicación del móvil está encendida y en modo preciso.", true);
+    } else if(!gotFix){
+      $("retryBtn").hidden = false;
+      setNote("No consigo tu ubicación. Enciende la ubicación del móvil y pulsa Reintentar.", true);
+    }
+  }, {enableHighAccuracy:high, maximumAge:high?1000:15000, timeout:high?12000:25000});
+}
 function startGps(){
   if(watchId!==null) return;
   if(!("geolocation" in navigator) || !window.isSecureContext){
-    setNote("Este navegador no deja usar el GPS aquí. Abre la página desde una dirección https o usa el modo prueba.", true); return;
+    setNote("Este navegador no deja usar el GPS aquí. Abre la página en Chrome desde su enlace https.", true); return;
   }
-  watchId = navigator.geolocation.watchPosition(function(p){
-    if(!demo) onPosition(p.coords.latitude, p.coords.longitude, p.coords.accuracy||30);
-  }, function(err){
-    setNote(err.code===1 ? "Permiso de ubicación denegado. Actívalo en los ajustes del navegador para esta página, o usa el modo prueba desde Opciones."
-                         : "No consigo tu ubicación todavía. Comprueba que el GPS está encendido.", true);
-  }, {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
+  $("retryBtn").hidden = true; updateGpsChip();
+  /* Primera posición rápida (red/wifi) y después seguimiento preciso por satélite */
+  navigator.geolocation.getCurrentPosition(geoOk, function(){}, {enableHighAccuracy:false, maximumAge:60000, timeout:8000});
+  watch(true);
 }
-function stopGps(){ if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; } }
+function stopGps(){ clearTimeout(retryTimer); if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; } }
+$("retryBtn").onclick = function(){ stopGps(); gotFix=false; setNote("Buscando tu posición…", false); startGps(); };
 function setDemo(v){
-  demo = v; pos = null;
-  if(v){ stopGps(); setNote("Modo prueba: toca el mapa para moverte.", false); }
-  else { setNote("", false); startGps(); }
+  demo = v; pos = null; gotFix = false;
+  if(v){ stopGps(); $("retryBtn").hidden = true; setNote("Modo prueba: toca el mapa para moverte.", false); }
+  else { setNote("Buscando tu posición…", false); startGps(); }
   $("demoBtn").textContent = v ? "Volver al GPS real" : "Activar modo prueba";
-  updateHeat();
+  updateOverlays(); updateHeat();
 }
-var wake = null;
-function keepAwake(){ try{ if(navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w){wake=w;}).catch(function(){}); }catch(e){} }
-document.addEventListener("visibilitychange", function(){ if(!document.hidden && S.started && !S.finished) keepAwake(); });
+
+/* Brújula: hacia dónde miras */
+var compassHeading = null;
+function onOrient(e){
+  var h = null;
+  if(typeof e.webkitCompassHeading==="number") h = e.webkitCompassHeading;
+  else if(e.absolute && e.alpha!==null) h = 360 - e.alpha;
+  if(h===null) return;
+  compassHeading = h; heading = h;
+  if(meMarker){ meMarker.getElement().querySelector(".cone").hidden = false; meMarker.setRotation(h); }
+}
+function startCompass(){
+  try{
+    if(window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission==="function"){
+      DeviceOrientationEvent.requestPermission().then(function(r){ if(r==="granted") window.addEventListener("deviceorientation", onOrient); }).catch(function(){});
+    } else if("ondeviceorientationabsolute" in window) window.addEventListener("deviceorientationabsolute", onOrient);
+    else window.addEventListener("deviceorientation", onOrient);
+  }catch(e){}
+}
+function keepAwake(){ try{ if(navigator.wakeLock) navigator.wakeLock.request("screen").catch(function(){}); }catch(e){} }
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden || !S.started || S.finished) return;
+  keepAwake(); if(!demo){ stopGps(); startGps(); }
+});
 
 /* ---------- Juego ---------- */
 function begin(useDemo){
   if(!S.started){ S.started = Date.now(); save(); }
   $("intro").hidden = true;
-  keepAwake(); setDemo(useDemo); render();
+  keepAwake(); startCompass(); setDemo(useDemo); render();
 }
 function arrive(){
   pendingFound = true;
@@ -374,12 +503,13 @@ function arrive(){
   $("nextBtn").textContent = last ? "Abrir el tesoro" : "Siguiente pista";
   S.idx++; S.hintOn = false;
   if(last) S.finished = Date.now();
-  save(); render();
-  $("found").hidden = false;
+  save(); render(); drawPins(true);
+  if(map) map.flyTo({center:[st.lng,st.lat], zoom:18, pitch:60, bearing:map.getBearing()+60, duration:1800});
+  setTimeout(function(){ $("found").hidden = false; }, 900);
 }
 $("nextBtn").onclick = function(){
   $("found").hidden = true; pendingFound = false;
-  if(S.finished) showEnd(); else if(pos) updateHeat();
+  if(S.finished) showEnd(); else { setFollow(true); updateHeat(); }
 };
 function showEnd(){
   $("endTime").textContent = fmtTime(elapsed());
@@ -387,22 +517,22 @@ function showEnd(){
   $("endHints").textContent = S.hints;
   $("end").hidden = false;
 }
-$("seeMapBtn").onclick = function(){
-  $("end").hidden = true; setFollow(false);
-  if(S.trail.length>1) map.fitBounds(trailLine.getBounds(), {padding:[40,40]});
-};
+$("seeMapBtn").onclick = function(){ $("end").hidden = true; showRoute(); };
 $("hintBtn").onclick = function(){
   if(S.hintOn || S.idx>=STOPS.length) return;
   S.hintOn = true; S.hints++; S.penalty += PENALTY; save(); render();
-  setFollow(false); map.fitBounds(hintCircle.getBounds(), {padding:[30,30]});
+  var st = STOPS[S.idx]; setFollow(false);
+  if(map) map.flyTo({center:[st.lng+st.hint[1], st.lat+st.hint[0]], zoom:16.3, pitch:0, duration:1000});
 };
 $("hereBtn").onclick = function(){ if(S.started && !S.finished && !pendingFound) arrive(); };
 
 function reset(){
   S = fresh(); save(); pos = null; pendingFound = false;
-  trailLine.setLatLngs([]);
+  if(meMarker){ meMarker.remove(); meMarker = null; }
   ["end","menu","found"].forEach(function(id){ $(id).hidden = true; });
-  $("intro").hidden = false; render();
+  $("startBtn").textContent = "Empezar con mi GPS"; $("startBtn").onclick = function(){ begin(false); };
+  $("introNote").hidden = true;
+  $("intro").hidden = false; drawPins(false); render();
 }
 $("againBtn").onclick = reset;
 var resetArmed = false;
@@ -412,24 +542,25 @@ $("resetBtn").onclick = function(){
 };
 $("menuBtn").onclick = function(){
   resetArmed = false; $("resetBtn").textContent = "Reiniciar partida";
-  $("menuInfo").textContent = "Llevas "+S.idx+" de "+STOPS.length+" sitios, "+fmtDist(S.dist)+" andados y "+S.hints+" ayudas. La partida se guarda sola en este móvil.";
+  $("menuInfo").textContent = "Llevas "+Math.min(S.idx,STOPS.length)+" de "+STOPS.length+" sitios, "+fmtDist(S.dist)+" andados y "+S.hints+" ayudas. La partida se guarda sola en este móvil.";
   $("menu").hidden = false;
 };
 $("closeMenuBtn").onclick = function(){ $("menu").hidden = true; };
 $("demoBtn").onclick = function(){ setDemo(!demo); $("menu").hidden = true; };
 $("startBtn").onclick = function(){ begin(false); };
 $("demoStartBtn").onclick = function(){ begin(true); };
-
 setInterval(function(){ if(S.started) $("time").textContent = fmtTime(elapsed()); }, 1000);
+window.addEventListener("resize", syncSheet);
 
 /* Reanudar partida guardada */
+function introNote(t){ $("introNote").textContent = t; $("introNote").hidden = false; }
 if(S.started){
   $("startBtn").textContent = S.finished ? "Ver resultado" : "Continuar partida";
-  $("introNote").textContent = S.finished ? "Ya completaste esta búsqueda en este móvil." : "Tienes una partida a medias: vas por la pista "+(Math.min(S.idx+1,STOPS.length))+".";
+  introNote(S.finished ? "Ya completaste esta búsqueda en este móvil." : "Tienes una partida a medias: vas por la pista "+Math.min(S.idx+1,STOPS.length)+".");
   if(S.finished) $("startBtn").onclick = function(){ $("intro").hidden = true; render(); showEnd(); };
 }
-if(!window.isSecureContext) $("introNote").textContent = "Aviso: el GPS solo funciona si la página se abre desde una dirección https. Mientras tanto puedes probarla desde casa.";
-render();
+if(!window.isSecureContext) introNote("Aviso: el GPS solo funciona si la página se abre desde una dirección https.");
+initMap(); render();
 </script>
 </body>
 </html>
