@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#14262b">
+<title>El Tesoro de Albacete</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Figtree:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<style>
+/* Mapa a pantalla completa; arriba una barra flotante de progreso, abajo la hoja con la pista. */
+:root{
+  --tinta:#14262b;      /* fondo de paneles */
+  --tinta-2:#1e383f;
+  --papel:#f3efe4;      /* texto sobre tinta */
+  --suave:#a9bcc0;
+  --azafran:#f2a516;    /* acento: azafrán de La Mancha */
+  --brasa:#e2502b;      /* "te quemas" */
+  --hielo:#58b7d6;      /* "helado" */
+  --ok:#5fcf8e;
+  --display:"Fraunces",Georgia,"Times New Roman",serif;
+  --texto:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--tinta);color:var(--papel);font:16px/1.45 var(--texto);overflow:hidden;
+  -webkit-tap-highlight-color:transparent}
+#map{position:fixed;inset:0;background:#dfe6e4}
+button{font:inherit;color:inherit;cursor:pointer;border:0}
+button:focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
+
+/* Barra superior */
+.top{position:fixed;z-index:1100;left:0;right:0;top:0;display:flex;gap:8px;align-items:stretch;
+  padding:calc(10px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px));
+  pointer-events:none}
+.pill{pointer-events:auto;background:var(--tinta);border-radius:14px;padding:8px 12px;
+  box-shadow:0 4px 14px rgba(0,0,0,.3);display:flex;flex-direction:column;justify-content:center;min-width:0}
+.pill small{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--suave)}
+.pill b{font-size:17px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill.grow{flex:1}
+.dots{display:flex;gap:5px;margin-top:4px}
+.dots i{flex:1;height:6px;border-radius:3px;background:var(--tinta-2)}
+.dots i.done{background:var(--azafran)}
+.dots i.now{background:var(--papel)}
+.iconbtn{pointer-events:auto;width:48px;border-radius:14px;background:var(--tinta);font-size:20px;
+  box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.iconbtn.on{background:var(--azafran);color:var(--tinta)}
+
+/* Botones flotantes del mapa */
+.side{position:fixed;z-index:1100;right:max(12px,env(safe-area-inset-right,0px));top:calc(84px + env(safe-area-inset-top,0px));
+  display:flex;flex-direction:column;gap:8px}
+.side .iconbtn{height:48px}
+
+/* Hoja inferior */
+.sheet{position:fixed;z-index:1100;left:0;right:0;bottom:0;background:var(--tinta);
+  border-radius:22px 22px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.35);
+  padding:16px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+  max-height:58%;overflow:auto}
+.eyebrow{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--azafran);font-weight:700}
+.clue{font:600 20px/1.3 var(--display);margin:6px 0 12px;text-wrap:balance}
+.heat{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.bar{flex:1;height:10px;border-radius:5px;background:var(--tinta-2);overflow:hidden}
+.bar span{display:block;height:100%;width:0;border-radius:5px;background:var(--hielo);transition:width .5s,background .5s}
+.heat b{min-width:104px;text-align:right;font-size:14px;font-variant-numeric:tabular-nums}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{flex:1;min-width:130px;padding:12px 14px;border-radius:12px;background:var(--tinta-2);font-weight:600;font-size:15px}
+.btn.main{background:var(--azafran);color:var(--tinta)}
+.btn.warn{background:var(--brasa);color:#fff}
+.note{font-size:13px;color:var(--suave);margin:10px 0 0}
+.note.alert{color:var(--azafran)}
+
+/* Pantallas superpuestas */
+.overlay{position:fixed;z-index:1200;inset:0;background:rgba(10,22,25,.82);display:flex;align-items:flex-end;justify-content:center}
+.card{background:var(--tinta);width:100%;max-width:520px;border-radius:24px 24px 0 0;
+  padding:26px max(20px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));
+  max-height:92%;overflow:auto}
+.card h1{font:800 34px/1.05 var(--display);margin:6px 0 12px;text-wrap:balance}
+.card h2{font:800 26px/1.1 var(--display);margin:6px 0 10px;text-wrap:balance}
+.card p{margin:0 0 12px;color:#dfe5e1}
+.card ul{margin:0 0 16px;padding-left:20px;color:#dfe5e1}
+.card li{margin-bottom:6px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 18px}
+.stats div{background:var(--tinta-2);border-radius:12px;padding:10px;text-align:center}
+.stats b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+.stats small{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--suave)}
+[hidden]{display:none!important}
+
+/* Marcadores */
+.me{width:22px;height:22px;border-radius:50%;background:var(--brasa);border:3px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.25)}
+.me::after{content:"";position:absolute;inset:-9px;border-radius:50%;border:2px solid var(--brasa);opacity:.7;animation:pulso 1.8s ease-out infinite}
+@keyframes pulso{to{transform:scale(1.9);opacity:0}}
+.flag{width:30px;height:30px;border-radius:50% 50% 50% 4px;background:var(--azafran);color:var(--tinta);border:2px solid var(--tinta);
+  display:grid;place-items:center;font:700 14px var(--texto);transform:rotate(-45deg)}
+.flag span{transform:rotate(45deg)}
+.leaflet-control-attribution{font-size:10px}
+.leaflet-bottom{bottom:var(--sheet-h,0px)}
+@media (prefers-reduced-motion:reduce){.me::after{animation:none}.bar span{transition:none}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="top">
+  <div class="pill grow">
+    <small id="progTxt">Pista 1 de 6</small>
+    <div class="dots" id="dots"></div>
+  </div>
+  <div class="pill"><small>Tiempo</small><b id="time">00:00</b></div>
+  <div class="pill"><small>Andado</small><b id="walk">0 m</b></div>
+</div>
+
+<div class="side">
+  <button class="iconbtn on" id="followBtn" aria-label="Seguir mi posición" title="Seguir mi posición">◎</button>
+  <button class="iconbtn" id="menuBtn" aria-label="Opciones" title="Opciones">⋯</button>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="eyebrow" id="eyebrow">Pista 1</div>
+  <div class="clue" id="clue"></div>
+  <div class="heat"><div class="bar"><span id="heatBar"></span></div><b id="heatTxt">Sin señal</b></div>
+  <div class="row">
+    <button class="btn" id="hintBtn">Pedir ayuda (+2 min)</button>
+    <button class="btn main" id="hereBtn" hidden>Estoy delante</button>
+  </div>
+  <p class="note" id="note"></p>
+</div>
+
+<!-- Inicio -->
+<div class="overlay" id="intro">
+  <div class="card">
+    <div class="eyebrow">Búsqueda del tesoro · 6 pistas · 2 km a pie</div>
+    <h1>El Tesoro de Albacete</h1>
+    <p>Seis acertijos te llevan por el centro de la ciudad. El mapa te sigue en directo y dibuja el camino que vas haciendo.</p>
+    <ul>
+      <li>Lee la pista y ve andando al sitio. El termómetro te dice si te acercas.</li>
+      <li>Al llegar (a unos 30 m) se desbloquea la siguiente.</li>
+      <li>Si te atascas, pide ayuda: verás una zona en el mapa, pero suma 2 minutos.</li>
+    </ul>
+    <div class="row">
+      <button class="btn main" id="startBtn">Empezar con mi GPS</button>
+      <button class="btn" id="demoStartBtn">Probar desde casa</button>
+    </div>
+    <p class="note" id="introNote"></p>
+  </div>
+</div>
+
+<!-- Sitio encontrado -->
+<div class="overlay" id="found" hidden>
+  <div class="card">
+    <div class="eyebrow" id="foundEyebrow">Encontrado</div>
+    <h2 id="foundName"></h2>
+    <p id="foundFact"></p>
+    <div class="row"><button class="btn main" id="nextBtn">Siguiente pista</button></div>
+  </div>
+</div>
+
+<!-- Final -->
+<div class="overlay" id="end" hidden>
+  <div class="card">
+    <div class="eyebrow">Tesoro encontrado</div>
+    <h1>¡Lo has conseguido!</h1>
+    <p>Has recorrido el centro de Albacete de pista en pista. Este es tu resultado:</p>
+    <div class="stats">
+      <div><b id="endTime">–</b><small>Tiempo</small></div>
+      <div><b id="endWalk">–</b><small>Andado</small></div>
+      <div><b id="endHints">–</b><small>Ayudas</small></div>
+    </div>
+    <div class="row">
+      <button class="btn" id="seeMapBtn">Ver mi recorrido</button>
+      <button class="btn main" id="againBtn">Jugar otra vez</button>
+    </div>
+  </div>
+</div>
+
+<!-- Opciones -->
+<div class="overlay" id="menu" hidden>
+  <div class="card">
+    <div class="eyebrow">Opciones</div>
+    <h2>Partida</h2>
+    <p id="menuInfo"></p>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn" id="demoBtn">Activar modo prueba</button>
+      <button class="btn warn" id="resetBtn">Reiniciar partida</button>
+    </div>
+    <div class="row"><button class="btn main" id="closeMenuBtn">Volver al mapa</button></div>
+  </div>
+</div>
+
+<script>
+/* ---------- Paradas (coordenadas reales del centro de Albacete) ---------- */
+var STOPS = [
+  { name:"Plaza del Altozano", lat:38.994720, lng:-1.854291, hint:[0.0004,-0.0005],
+    clue:"Todo empieza en la plaza más céntrica de la ciudad, la del Altozano. Plántate en ella.",
+    fact:"Bajo tus pies hay un refugio antiaéreo de la Guerra Civil. Hoy se puede visitar." },
+  { name:"Teatro Circo", lat:38.995828, lng:-1.854334, hint:[-0.0004,0.0005],
+    clue:"Acróbatas y actores comparten techo desde 1887, en la calle del inventor del submarino.",
+    fact:"Es uno de los poquísimos teatros circo del siglo XIX que siguen en activo en el mundo. Está en la calle Isaac Peral." },
+  { name:"Catedral de San Juan Bautista", lat:38.995812, lng:-1.856312, hint:[0.0005,0.0004],
+    clue:"El templo mayor de Albacete lleva el nombre del santo que bautizaba en el Jordán.",
+    fact:"San Juan Bautista es también el patrón de la ciudad: su día, el 24 de junio, es fiesta local." },
+  { name:"Museo de la Cuchillería", lat:38.996250, lng:-1.856472, hint:[-0.0005,-0.0003],
+    clue:"Muy cerca, una casa verde con aire de castillo gótico guarda el oficio más afilado de la ciudad.",
+    fact:"Es la Casa de Hortelano. Dentro hay navajas y cuchillos de varios siglos: Albacete es la capital cuchillera de España." },
+  { name:"Pasaje de Lodares", lat:38.993234, lng:-1.855805, hint:[0.0005,0.0005],
+    clue:"Una calle con techo de hierro y cristal, como las galerías italianas, une la calle Mayor con la del Tinte.",
+    fact:"Se abrió en 1925 y es una de las pocas galerías comerciales de este estilo que quedan en España. Mira hacia arriba." },
+  { name:"Museo de Albacete", lat:38.986442, lng:-1.855897, hint:[-0.0005,0.0006],
+    clue:"El tesoro te espera en el gran parque del centro, junto al edificio que guarda la historia de toda la provincia.",
+    fact:"Estás en el parque Abelardo Sánchez, el pulmón verde del centro, delante del Museo de Albacete. Aquí acaba la búsqueda." }
+];
+var RADIUS = 30, NEAR = 120, HINT_RADIUS = 130, PENALTY = 120000, KEY = "tesoro-albacete-v1";
+
+/* ---------- Estado ---------- */
+function fresh(){ return {idx:0, started:0, finished:0, hints:0, penalty:0, trail:[], dist:0, hintOn:false}; }
+function load(){ try{ var s = JSON.parse(localStorage.getItem(KEY)); if(s && typeof s.idx==="number") return s; }catch(e){} return null; }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+var S = load() || fresh();
+var demo = false, follow = true, pos = null, watchId = null, pendingFound = false;
+
+var $ = function(id){ return document.getElementById(id); };
+
+/* ---------- Mapa ---------- */
+var map = L.map("map", {zoomControl:false, attributionControl:true}).setView([38.9925,-1.8556], 15);
+var tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+  maxZoom:20, subdomains:"abcd",
+  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+}).addTo(map);
+var tileFails = 0, swapped = false;
+tiles.on("tileerror", function(){
+  if(swapped || ++tileFails < 4) return;
+  swapped = true; map.removeLayer(tiles);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+});
+setTimeout(function(){ map.invalidateSize(); }, 300);
+var trailLine = L.polyline(S.trail, {color:"#e2502b", weight:5, opacity:.85, lineJoin:"round"}).addTo(map);
+var meMarker = null, accCircle = null, hintCircle = null, foundLayer = L.layerGroup().addTo(map);
+map.on("dragstart", function(){ setFollow(false); });
+map.on("click", function(e){ if(demo) onPosition(e.latlng.lat, e.latlng.lng, 5); });
+
+function setFollow(v){ follow = v; $("followBtn").classList.toggle("on", v); if(v && pos) map.panTo(pos); }
+$("followBtn").onclick = function(){ setFollow(!follow); };
+
+function drawFound(){
+  foundLayer.clearLayers();
+  for(var i=0;i<S.idx && i<STOPS.length;i++){
+    var st = STOPS[i];
+    L.marker([st.lat,st.lng], {icon:L.divIcon({className:"", html:'<div class="flag"><span>'+(i+1)+'</span></div>', iconSize:[30,30], iconAnchor:[4,30]})})
+      .bindPopup("<b>"+st.name+"</b>").addTo(foundLayer);
+  }
+}
+function drawHint(){
+  if(hintCircle){ map.removeLayer(hintCircle); hintCircle = null; }
+  if(S.hintOn && S.idx < STOPS.length){
+    var st = STOPS[S.idx];
+    hintCircle = L.circle([st.lat+st.hint[0], st.lng+st.hint[1]], {radius:HINT_RADIUS, color:"#f2a516", weight:2, dashArray:"6 6", fillColor:"#f2a516", fillOpacity:.18}).addTo(map);
+  }
+}
+
+/* ---------- Utilidades ---------- */
+function meters(a,b,c,d){
+  var R=6371000, p=Math.PI/180, x=(d-b)*p*Math.cos((a+c)/2*p), y=(c-a)*p;
+  return Math.sqrt(x*x+y*y)*R;
+}
+function fmtTime(ms){
+  var s=Math.max(0,Math.floor(ms/1000)), h=Math.floor(s/3600), m=Math.floor(s%3600/60), ss=s%60;
+  return (h? h+":"+String(m).padStart(2,"0") : String(m).padStart(2,"0"))+":"+String(ss).padStart(2,"0");
+}
+function fmtDist(m){ return m<1000 ? Math.round(m)+" m" : (m/1000).toFixed(2).replace(".",",")+" km"; }
+function elapsed(){ if(!S.started) return 0; return (S.finished||Date.now()) - S.started + S.penalty; }
+
+/* ---------- Pantalla ---------- */
+function render(){
+  var n = STOPS.length, done = S.idx >= n;
+  $("progTxt").textContent = done ? "Tesoro encontrado" : "Pista "+(S.idx+1)+" de "+n;
+  var d = "";
+  for(var i=0;i<n;i++) d += '<i class="'+(i<S.idx?"done":(i===S.idx?"now":""))+'"></i>';
+  $("dots").innerHTML = d;
+  $("walk").textContent = fmtDist(S.dist);
+  $("time").textContent = fmtTime(elapsed());
+  if(!done){
+    $("eyebrow").textContent = "Pista "+(S.idx+1);
+    $("clue").textContent = STOPS[S.idx].clue;
+    $("hintBtn").hidden = false;
+    $("hintBtn").disabled = S.hintOn;
+    $("hintBtn").textContent = S.hintOn ? "Zona marcada en el mapa" : "Pedir ayuda (+2 min)";
+  } else {
+    $("eyebrow").textContent = "Fin de la búsqueda";
+    $("clue").textContent = "Has encontrado el tesoro. En el mapa queda dibujado todo tu recorrido.";
+    $("hintBtn").hidden = true; $("hereBtn").hidden = true;
+  }
+  drawFound(); drawHint(); updateHeat();
+  requestAnimationFrame(function(){
+    document.documentElement.style.setProperty("--sheet-h", $("sheet").offsetHeight+"px");
+  });
+}
+function updateHeat(){
+  var bar=$("heatBar"), txt=$("heatTxt");
+  if(S.idx >= STOPS.length){ bar.style.width="100%"; bar.style.background="var(--ok)"; txt.textContent="Completado"; return; }
+  if(!pos){ bar.style.width="0"; txt.textContent = demo ? "Toca el mapa" : "Buscando GPS…"; $("hereBtn").hidden = true; return; }
+  var st=STOPS[S.idx], d=meters(pos[0],pos[1],st.lat,st.lng), label, color;
+  if(d>700){label="Helado";color="var(--hielo)";}
+  else if(d>350){label="Frío";color="var(--hielo)";}
+  else if(d>170){label="Templado";color="var(--azafran)";}
+  else if(d>70){label="Caliente";color="var(--azafran)";}
+  else {label="¡Te quemas!";color="var(--brasa)";}
+  bar.style.width = Math.max(4, Math.min(100, 100*(1 - d/1200)))+"%";
+  bar.style.background = color;
+  txt.textContent = label+" · "+(d<1000 ? Math.round(d/10)*10+" m" : fmtDist(d));
+  $("hereBtn").hidden = !(d<=NEAR && S.started && !S.finished);
+}
+
+/* ---------- Posición ---------- */
+function onPosition(lat,lng,acc){
+  pos = [lat,lng];
+  if(!meMarker){
+    meMarker = L.marker(pos, {icon:L.divIcon({className:"", html:'<div class="me"></div>', iconSize:[22,22], iconAnchor:[11,11]}), zIndexOffset:1000}).addTo(map);
+    accCircle = L.circle(pos, {radius:acc, color:"#e2502b", weight:1, fillOpacity:.08}).addTo(map);
+    map.setView(pos, 17);
+  } else { meMarker.setLatLng(pos); accCircle.setLatLng(pos).setRadius(acc); }
+  if(follow) map.panTo(pos, {animate:true});
+
+  var weak = acc > 60;
+  setNote(weak ? "Señal GPS débil (±"+Math.round(acc)+" m). Sal a cielo abierto si puedes." : (demo ? "Modo prueba: toca el mapa para moverte." : ""), weak);
+
+  if(S.started && !S.finished && !pendingFound){
+    var last = S.trail[S.trail.length-1];
+    if(!last){ S.trail.push([lat,lng]); }
+    else {
+      var step = meters(last[0],last[1],lat,lng);
+      if(step >= 5 && (acc <= 50 || demo)){ S.trail.push([lat,lng]); S.dist += step; }
+    }
+    trailLine.setLatLngs(S.trail);
+    var st = STOPS[S.idx];
+    if(meters(lat,lng,st.lat,st.lng) <= RADIUS && acc <= 60) arrive();
+    save();
+  }
+  $("walk").textContent = fmtDist(S.dist);
+  updateHeat();
+}
+function setNote(t, alert){ var n=$("note"); n.textContent=t; n.classList.toggle("alert", !!alert); n.hidden = !t;
+  document.documentElement.style.setProperty("--sheet-h", $("sheet").offsetHeight+"px"); }
+
+function startGps(){
+  if(watchId!==null) return;
+  if(!("geolocation" in navigator) || !window.isSecureContext){
+    setNote("Este navegador no deja usar el GPS aquí. Abre la página desde una dirección https o usa el modo prueba.", true); return;
+  }
+  watchId = navigator.geolocation.watchPosition(function(p){
+    if(!demo) onPosition(p.coords.latitude, p.coords.longitude, p.coords.accuracy||30);
+  }, function(err){
+    setNote(err.code===1 ? "Permiso de ubicación denegado. Actívalo en los ajustes del navegador para esta página, o usa el modo prueba desde Opciones."
+                         : "No consigo tu ubicación todavía. Comprueba que el GPS está encendido.", true);
+  }, {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
+}
+function stopGps(){ if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; } }
+function setDemo(v){
+  demo = v; pos = null;
+  if(v){ stopGps(); setNote("Modo prueba: toca el mapa para moverte.", false); }
+  else { setNote("", false); startGps(); }
+  $("demoBtn").textContent = v ? "Volver al GPS real" : "Activar modo prueba";
+  updateHeat();
+}
+var wake = null;
+function keepAwake(){ try{ if(navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w){wake=w;}).catch(function(){}); }catch(e){} }
+document.addEventListener("visibilitychange", function(){ if(!document.hidden && S.started && !S.finished) keepAwake(); });
+
+/* ---------- Juego ---------- */
+function begin(useDemo){
+  if(!S.started){ S.started = Date.now(); save(); }
+  $("intro").hidden = true;
+  keepAwake(); setDemo(useDemo); render();
+}
+function arrive(){
+  pendingFound = true;
+  var st = STOPS[S.idx], last = S.idx === STOPS.length-1;
+  if(navigator.vibrate) try{ navigator.vibrate([120,60,120]); }catch(e){}
+  $("foundEyebrow").textContent = last ? "Última parada" : "Pista "+(S.idx+1)+" resuelta";
+  $("foundName").textContent = st.name;
+  $("foundFact").textContent = st.fact;
+  $("nextBtn").textContent = last ? "Abrir el tesoro" : "Siguiente pista";
+  S.idx++; S.hintOn = false;
+  if(last) S.finished = Date.now();
+  save(); render();
+  $("found").hidden = false;
+}
+$("nextBtn").onclick = function(){
+  $("found").hidden = true; pendingFound = false;
+  if(S.finished) showEnd(); else if(pos) updateHeat();
+};
+function showEnd(){
+  $("endTime").textContent = fmtTime(elapsed());
+  $("endWalk").textContent = fmtDist(S.dist);
+  $("endHints").textContent = S.hints;
+  $("end").hidden = false;
+}
+$("seeMapBtn").onclick = function(){
+  $("end").hidden = true; setFollow(false);
+  if(S.trail.length>1) map.fitBounds(trailLine.getBounds(), {padding:[40,40]});
+};
+$("hintBtn").onclick = function(){
+  if(S.hintOn || S.idx>=STOPS.length) return;
+  S.hintOn = true; S.hints++; S.penalty += PENALTY; save(); render();
+  setFollow(false); map.fitBounds(hintCircle.getBounds(), {padding:[30,30]});
+};
+$("hereBtn").onclick = function(){ if(S.started && !S.finished && !pendingFound) arrive(); };
+
+function reset(){
+  S = fresh(); save(); pos = null; pendingFound = false;
+  trailLine.setLatLngs([]);
+  ["end","menu","found"].forEach(function(id){ $(id).hidden = true; });
+  $("intro").hidden = false; render();
+}
+$("againBtn").onclick = reset;
+var resetArmed = false;
+$("resetBtn").onclick = function(){
+  if(!resetArmed){ resetArmed = true; this.textContent = "¿Seguro? Pulsa otra vez"; return; }
+  resetArmed = false; this.textContent = "Reiniciar partida"; reset();
+};
+$("menuBtn").onclick = function(){
+  resetArmed = false; $("resetBtn").textContent = "Reiniciar partida";
+  $("menuInfo").textContent = "Llevas "+S.idx+" de "+STOPS.length+" sitios, "+fmtDist(S.dist)+" andados y "+S.hints+" ayudas. La partida se guarda sola en este móvil.";
+  $("menu").hidden = false;
+};
+$("closeMenuBtn").onclick = function(){ $("menu").hidden = true; };
+$("demoBtn").onclick = function(){ setDemo(!demo); $("menu").hidden = true; };
+$("startBtn").onclick = function(){ begin(false); };
+$("demoStartBtn").onclick = function(){ begin(true); };
+
+setInterval(function(){ if(S.started) $("time").textContent = fmtTime(elapsed()); }, 1000);
+
+/* Reanudar partida guardada */
+if(S.started){
+  $("startBtn").textContent = S.finished ? "Ver resultado" : "Continuar partida";
+  $("introNote").textContent = S.finished ? "Ya completaste esta búsqueda en este móvil." : "Tienes una partida a medias: vas por la pista "+(Math.min(S.idx+1,STOPS.length))+".";
+  if(S.finished) $("startBtn").onclick = function(){ $("intro").hidden = true; render(); showEnd(); };
+}
+if(!window.isSecureContext) $("introNote").textContent = "Aviso: el GPS solo funciona si la página se abre desde una dirección https. Mientras tanto puedes probarla desde casa.";
+render();
+</script>
+</body>
+</html>
