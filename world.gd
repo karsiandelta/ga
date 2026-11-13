@@ -10,7 +10,8 @@ const P := 58.0
 const X0 := -138.0
 const FY := 0.1
 # Filas = norte a sur. R casas, A pisos, S súper, C café, F muebles, G gimnasio, P plaza, K parque, H tu casa
-const LAYOUT := ["RRARR", "RSCRA", "AFPGR", "RRKRR", "RHRAR"]
+# E gasolinera y taller, B banco
+const LAYOUT := ["RRARR", "ESCRA", "AFPGR", "RBKRR", "RHRAR"]
 const SURNAMES := ["García", "Martínez", "López", "Sánchez", "Romero", "Navarro", "Torres", "Ruiz", "Molina", "Ortega", "Castro", "Vega", "Serrano", "Iglesias", "Cano", "Prieto", "Fuentes", "Blanco"]
 const BUILDINGS := ["Alba", "Lucero", "Girasol", "Brisa", "Aurora", "Olivo", "Jazmín", "Coral", "Mirador", "Azahar"]
 
@@ -34,6 +35,9 @@ var mat_water: ShaderMaterial
 var noise: ImageTexture
 var colliders: Array[Rect2] = []
 var buildings: Array = []
+var lamps: Array = []
+var taller_pos := Vector3.ZERO
+var mat_pool: ShaderMaterial
 var doors: Array = []
 var spots: Array = []
 var rooms: Dictionary = {}
@@ -88,6 +92,7 @@ func build(parent: Node) -> void:
 	mat_solid = Shaders.material(Shaders.WORLD, noise)
 	mat_glow = Shaders.material(Shaders.GLASS)
 	mat_water = Shaders.material(Shaders.WATER, noise)
+	mat_pool = Shaders.material(Shaders.POOL)
 	_water = MB.new()
 	_ground()
 	for j in N:
@@ -95,6 +100,7 @@ func build(parent: Node) -> void:
 			_block(i, j)
 	_scenery()
 	_water.instance(root, mat_water, false)
+	_light_pools()
 	_interiors()
 
 
@@ -171,6 +177,7 @@ func _tree(mb, p: Vector3, sc: float, kind: int, collide: bool = true) -> void:
 
 
 func _lamp(s, g, p: Vector3) -> void:
+	lamps.append(p)
 	s.cyl(p, 0.1, 0.06, 4.2, C_DARK, 6, false)
 	s.box(p + Vector3(0, 4.25, 0), Vector3(0.55, 0.08, 0.55), C_DARK, true)
 	g.sphere(p + Vector3(0, 4.08, 0), Vector3(0.24, 0.22, 0.24), Color.WHITE, 6, 4)
@@ -217,7 +224,7 @@ func _block(i: int, j: int) -> void:
 	s.m = 0.6
 	s.box(Vector3(c.x, 0, c.z), Vector3(50, 0.15, 50), C_SIDEWALK)
 	var lot := C_GRASS
-	if t == "S" or t == "C" or t == "F" or t == "G":
+	if t == "S" or t == "C" or t == "F" or t == "G" or t == "E" or t == "B":
 		lot = Color(0.68, 0.64, 0.57)
 	elif t == "P":
 		lot = Color(0.76, 0.68, 0.53)
@@ -235,6 +242,15 @@ func _block(i: int, j: int) -> void:
 		for sd in [-1.0, 1.0]:
 			_tree(s, Vector3(c.x + o, 0.15, c.z + sd * 24.4), 0.75, 0)
 			_tree(s, Vector3(c.x + sd * 24.4, 0.15, c.z + o), 0.75, 0)
+	for sgn in [-1.0, 1.0]:
+		var tl := c + Vector3(sgn * 22.4, 0.15, sgn * 24.7)
+		s.cyl(tl, 0.09, 0.07, 3.4, C_DARK, 6, false)
+		s.box(tl + Vector3(0, 3.4, 0), Vector3(0.38, 1.05, 0.3), C_DARK, true)
+		var lights := [Color(0.15, 0.8, 0.3), Color(0.95, 0.7, 0.1), Color(0.9, 0.15, 0.12)]
+		for k in 3:
+			s.box(tl + Vector3(0, 3.5 + k * 0.31, sgn * 0.16), Vector3(0.2, 0.2, 0.04), lights[k])
+		var bin := c + Vector3(sgn * 19.0, 0.15, sgn * 24.6)
+		s.cyl(bin, 0.26, 0.3, 0.85, Color(0.2, 0.35, 0.28), 8)
 	match t:
 		"R":
 			_residential(s, g, c, false)
@@ -246,6 +262,8 @@ func _block(i: int, j: int) -> void:
 			_plaza(s, g, c)
 		"K":
 			_park(s, g, c)
+		"E":
+			_gas(s, g, c)
 		_:
 			_shop(s, g, c, t)
 	s.instance(root, mat_solid)
@@ -410,6 +428,11 @@ func _shop(s, g, c: Vector3, t: String) -> void:
 		sname = "Gimnasio Titán"
 		accent = Color(0.95, 0.55, 0.1)
 		wallc = Color(0.34, 0.36, 0.4)
+	elif t == "B":
+		kind = "banco"
+		sname = "Banco Mirasol"
+		accent = Color(0.12, 0.3, 0.22)
+		wallc = Color(0.84, 0.82, 0.78)
 	var w := 32.0
 	var d := 22.0
 	var h := 6.5
@@ -822,6 +845,8 @@ func _wbench(f, x: float, z: float, rot: float) -> void:
 
 
 func _interiors() -> void:
+	_int_gas(8)
+	_int_banco(9)
 	_int_super(0)
 	_int_cafe(1)
 	_int_muebles(2)
@@ -995,6 +1020,7 @@ func _int_hogar(idx: int) -> void:
 	_spot(o, -6.6, -4.0, "Comer algo de la nevera", "nevera", "hogar", "Nevera")
 	_spot(o, 3.9, -4.2, "Dormir", "dormir", "hogar", "Cama")
 	_spot(o, -5.6, 3.6, "Ver la tele", "tele", "hogar", "Tele")
+	_own_spot(o, 3.4, 4.4, "Mejoras de la casa", "mejoras", "hogar", "Mejoras")
 	_room_end(r)
 
 
@@ -1022,4 +1048,172 @@ func _int_casa(kind: String, idx: int, w: float, d: float, floorc: Color, wallc:
 	_floor_lamp(f, r.g, -m * (hw - 0.8), hd - 0.8)
 	r.g.box(Vector3(0, 1.3, -hd + 0.03), Vector3(2.2, 1.3, 0.05), Color.WHITE)
 	_static(o, m * 0.6, -0.9, 0.0, kind, "host", "vecino")
+	_own_spot(o, m * (hw - 2.3), -hd + 2.3, "Comer algo de la nevera", "nevera", kind)
+	_own_spot(o, -m * 3.0, 0.6, "Ver la tele", "tele", kind)
+	_own_spot(o, -m * 4.9, 2.9, "Dormir en el sofá", "dormir", kind)
+	_own_spot(o, 3.4, hd - 1.6, "Mejoras de la casa", "mejoras", kind)
+	_room_end(r)
+
+
+func _own_spot(o: Vector3, x: float, z: float, label: String, id: String, kind: String, tag: String = "") -> void:
+	_spot(o, x, z, label, id, kind, tag)
+	spots[spots.size() - 1]["own"] = true
+
+
+func _light_pools() -> void:
+	var v := PackedVector3Array()
+	var cl := PackedColorArray()
+	var seg := 14
+	for lp in lamps:
+		var p: Vector3 = lp
+		var cen := Vector3(p.x, 0.22, p.z)
+		for i in seg:
+			var a0 := TAU * float(i) / float(seg)
+			var a1 := TAU * float(i + 1) / float(seg)
+			v.append(cen)
+			v.append(cen + Vector3(cos(a0), 0, sin(a0)) * 8.0)
+			v.append(cen + Vector3(cos(a1), 0, sin(a1)) * 8.0)
+			cl.append(Color(1, 1, 1))
+			cl.append(Color(0, 0, 0))
+			cl.append(Color(0, 0, 0))
+	var arr: Array = []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_COLOR] = cl
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	m.surface_set_material(0, mat_pool)
+	var mi := MeshInstance3D.new()
+	mi.mesh = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(mi)
+
+
+# ---------------------------------------------------------------- gasolinera y taller
+
+func _gas(s, g, c: Vector3) -> void:
+	var red := Color(0.8, 0.14, 0.12)
+	var white := Color(0.93, 0.93, 0.91)
+	# tienda
+	var sp := Vector3(c.x - 9.0, 0.16, c.z - 12.0)
+	s.m = 0.2
+	s.box(sp, Vector3(16, 4.2, 9), white)
+	s.m = 0.3
+	s.box(sp, Vector3(16.14, 0.8, 9.14), Color(0.45, 0.3, 0.26))
+	s.m = 1.0
+	s.box(sp + Vector3(0, 4.2, 0), Vector3(16.5, 0.5, 9.5), red)
+	var fz := sp.z + 4.5
+	for sx in [-1.0, 1.0]:
+		s.box(Vector3(sp.x + sx * 4.6, 0.8, fz + 0.02), Vector3(5.6, 2.5, 0.08), C_DARK)
+		g.m = 0.5
+		g.box(Vector3(sp.x + sx * 4.6, 0.92, fz + 0.04), Vector3(5.2, 2.2, 0.1), Color.WHITE)
+	s.box(Vector3(sp.x, 0.16, fz + 0.02), Vector3(2.5, 2.9, 0.08), C_DARK)
+	g.box(Vector3(sp.x, 0.16, fz + 0.05), Vector3(2.1, 2.7, 0.1), Color.WHITE)
+	g.m = 1.0
+	_label("Tienda 24 h", Vector3(sp.x, 3.75, fz + 0.12), 0.009, Color(1, 1, 1))
+	add_col(sp.x, sp.z, 16, 9)
+	buildings.append([Rect2(sp.x - 8.5, sp.z - 5.0, 17, 10), 5.5])
+	doors.append({"pos": Vector3(sp.x, 0, fz + 1.2), "dir": Vector3(0, 0, 1), "kind": "gasolinera", "name": "Tienda de la gasolinera"})
+	# taller
+	var tp := Vector3(c.x + 12.0, 0.16, c.z - 12.0)
+	s.m = 0.3
+	s.box(tp, Vector3(13, 5.0, 10), Color(0.5, 0.52, 0.56))
+	s.m = 1.0
+	s.box(tp + Vector3(0, 5.0, 0), Vector3(13.4, 0.4, 10.4), Color(0.95, 0.75, 0.1))
+	for sx in [-1.0, 1.0]:
+		s.box(Vector3(tp.x + sx * 3.1, 0.16, tp.z + 5.03), Vector3(5.2, 3.6, 0.08), Color(0.08, 0.08, 0.1))
+		for k in 5:
+			s.box(Vector3(tp.x + sx * 3.1, 0.5 + k * 0.7, tp.z + 5.07), Vector3(5.2, 0.06, 0.04), Color(0.3, 0.3, 0.33))
+	_label("TALLER", Vector3(tp.x, 4.45, tp.z + 5.1), 0.014, Color(1, 0.9, 0.3))
+	add_col(tp.x, tp.z, 13, 10)
+	buildings.append([Rect2(tp.x - 7.0, tp.z - 5.5, 14, 11), 6.0])
+	taller_pos = Vector3(tp.x, 0, tp.z + 9.5)
+	s.flat(Vector3(tp.x, 0.175, tp.z + 9.5), 7.0, 5.0, Color(0.95, 0.78, 0.1))
+	s.flat(Vector3(tp.x, 0.18, tp.z + 9.5), 6.4, 4.4, Color(0.3, 0.3, 0.32))
+	_label("Mejoras y reparación", Vector3(tp.x, 2.6, tp.z + 9.5), 0.007, Color(1, 0.9, 0.3), true)
+	# marquesina y surtidores
+	var cp := Vector3(c.x - 4.0, 0.16, c.z + 10.0)
+	s.box(cp + Vector3(0, 5.0, 0), Vector3(24, 0.7, 11), white, true)
+	s.box(cp + Vector3(0, 5.05, 5.52), Vector3(24, 0.6, 0.06), red)
+	s.box(cp + Vector3(0, 5.05, -5.52), Vector3(24, 0.6, 0.06), red)
+	for k in 6:
+		g.box(cp + Vector3(-10.0 + k * 4.0, 4.93, 0), Vector3(1.6, 0.06, 0.8), Color.WHITE)
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			var pl := cp + Vector3(sx * 10.5, 0, sz * 4.0)
+			s.box(pl, Vector3(0.5, 5.0, 0.5), Color(0.8, 0.8, 0.82))
+			add_col(pl.x, pl.z, 0.5, 0.5)
+		var isl := cp + Vector3(sx * 5.0, 0, 0)
+		s.box(isl, Vector3(1.4, 0.22, 5.0), C_STONE)
+		for pz in [-1.3, 1.3]:
+			s.box(isl + Vector3(0, 0.22, pz), Vector3(0.9, 1.7, 0.6), red)
+			s.box(isl + Vector3(0, 1.25, pz + 0.31), Vector3(0.6, 0.4, 0.03), Color(0.1, 0.12, 0.15))
+			s.box(isl + Vector3(0, 1.25, pz - 0.31), Vector3(0.6, 0.4, 0.03), Color(0.1, 0.12, 0.15))
+			s.box(isl + Vector3(0, 1.92, pz), Vector3(1.0, 0.16, 0.7), white)
+		add_col(isl.x, isl.z, 1.4, 5.0)
+	_label("Gasolinera Ruta 7", cp + Vector3(0, 5.37, 5.57), 0.013, Color(1, 1, 1))
+	var pole := Vector3(c.x + 19.5, 0.16, c.z + 19.5)
+	s.box(pole, Vector3(0.4, 7.0, 0.4), Color(0.8, 0.8, 0.82))
+	s.box(pole + Vector3(0, 4.6, 0), Vector3(3.0, 2.6, 0.5), red, true)
+	_label("RUTA 7", pole + Vector3(0, 6.3, 0.27), 0.011, Color(1, 1, 1))
+	_label("Sin plomo 1,48", pole + Vector3(0, 5.4, 0.27), 0.006, Color(1, 0.95, 0.6))
+	add_col(pole.x, pole.z, 0.6, 0.6)
+	for sx in [-18.0, 6.0]:
+		_tree(s, Vector3(c.x + sx, 0.16, c.z + 20.0), 0.9, 0)
+
+
+func _int_gas(idx: int) -> void:
+	var r := _room_begin("gasolinera", "Tienda de la gasolinera", idx, 12.0, 9.0, Color(0.72, 0.74, 0.76), Color(0.88, 0.88, 0.85), true)
+	var o: Vector3 = r.o
+	var f = r.f
+	for k in 4:
+		_fridge(f, -4.4 + k * 1.25, -4.0, 0.0)
+	_fcol(o, -2.5, -4.0, 5.2, 1.0)
+	_shelf(f, -2.5, -0.8, 0.0, 5.0)
+	_fcol(o, -2.5, -0.8, 5.0, 1.1)
+	_shelf(f, -2.5, 1.9, 0.0, 5.0)
+	_fcol(o, -2.5, 1.9, 5.0, 1.1)
+	_counter(f, 3.6, -1.4, PI / 2.0, 3.2, Color(0.8, 0.14, 0.12))
+	f.box(Vector3(3.6, FY + 1.01, -2.2), Vector3(0.42, 0.3, 0.42), C_DARK)
+	_fcol(o, 3.6, -1.4, 0.9, 3.2)
+	_plant(f, 5.2, 3.6)
+	r.g.box(Vector3(2.5, 2.0, -4.47), Vector3(4.0, 0.5, 0.05), Color.WHITE)
+	_static(o, 4.9, -1.4, -PI / 2.0, "gasolinera", "cajero", "Toño, el de la gasolinera")
+	_spot(o, -2.5, 0.55, "Comprar un bocadillo  §6", "snack", "gasolinera", "Snacks")
+	_room_end(r)
+
+
+func _int_banco(idx: int) -> void:
+	var r := _room_begin("banco", "Banco Mirasol", idx, 18.0, 12.0, Color(0.78, 0.76, 0.72), Color(0.9, 0.89, 0.85), true)
+	var o: Vector3 = r.o
+	var f = r.f
+	var green := Color(0.12, 0.3, 0.22)
+	_counter(f, 0.0, -2.4, 0.0, 13.0, green)
+	_fcol(o, 0.0, -2.4, 13.0, 0.9)
+	for k in 4:
+		r.g.box(Vector3(-4.8 + k * 3.2, FY + 1.05, -2.4), Vector3(2.6, 1.0, 0.05), Color.WHITE)
+		f.box(Vector3(-6.4 + k * 3.2, FY + 1.0, -2.4), Vector3(0.1, 1.1, 0.5), C_DARK)
+	f.box(Vector3(6.4, FY + 1.0, -2.4), Vector3(0.1, 1.1, 0.5), C_DARK)
+	# cámara acorazada
+	f.box(Vector3(0, FY, -5.9), Vector3(4.0, 3.0, 0.2), Color(0.42, 0.44, 0.48))
+	f.push_t(Transform3D(Basis(Vector3(1, 0, 0), PI / 2.0), Vector3(0, FY + 1.5, -5.78)))
+	f.m = 0.8
+	f.cyl(Vector3.ZERO, 1.25, 1.25, 0.14, Color(0.62, 0.64, 0.68), 20)
+	f.cyl(Vector3(0, 0.14, 0), 0.3, 0.3, 0.1, Color(0.8, 0.7, 0.3), 12)
+	f.m = 1.0
+	f.pop()
+	f.box(Vector3(0, FY + 1.46, -5.6), Vector3(1.5, 0.08, 0.06), Color(0.8, 0.7, 0.3))
+	f.box(Vector3(0, FY + 0.75, -5.6), Vector3(0.08, 1.5, 0.06), Color(0.8, 0.7, 0.3))
+	_rug(f, 0.0, 2.2, 6.0, 3.6, green)
+	_sofa(f, -7.2, 2.6, PI / 2.0, Color(0.3, 0.32, 0.36))
+	_fcol(o, -7.2, 2.6, 1.0, 2.3)
+	_plant(f, -8.0, 5.0, 1.3)
+	_plant(f, 8.0, 5.0, 1.3)
+	_plant(f, 8.0, -1.0, 1.1)
+	for x in [-3.0, 3.0]:
+		f.cyl(Vector3(x, FY, 0.4), 0.2, 0.2, 0.04, C_DARK, 8)
+		f.cyl(Vector3(x, FY, 0.4), 0.03, 0.03, 0.95, Color(0.8, 0.7, 0.3), 6, false)
+	f.box(Vector3(0, FY + 0.88, 0.4), Vector3(6.0, 0.06, 0.04), Color(0.6, 0.1, 0.1))
+	_static(o, 0.0, -3.5, 0.0, "banco", "banquero", "Pilar, la cajera del banco")
+	_static(o, 7.4, 3.0, -PI / 2.0, "banco", "guard", "Paco, el guardia")
 	_room_end(r)

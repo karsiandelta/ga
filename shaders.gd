@@ -64,6 +64,8 @@ void fragment() {
 		col *= 0.9 + 0.2 * n1;
 		col *= 0.96 + 0.08 * n2;
 		if (!top) {
+			float flr = fract((wpos.y - 0.16) / 3.0);
+			col *= 1.0 - 0.2 * (1.0 - smoothstep(0.0, 0.035, min(flr, 1.0 - flr))) * step(wpos.x, 500.0);
 			float streak = texture(noise_tex, vec2(hcoord * 0.5, wpos.y * 0.03)).r;
 			col *= mix(1.0, 0.86, smoothstep(0.55, 0.8, streak) * smoothstep(6.0, 0.5, wpos.y) * 0.8);
 		}
@@ -143,6 +145,7 @@ void fragment() {
 		vec3 nw = normalize(vec3((h0 - hx) * bump, 1.0, (h0 - hz) * bump));
 		NORMAL = normalize((VIEW_MATRIX * vec4(nw, 0.0)).xyz);
 	}
+	col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.8);
 	ALBEDO = col;
 	ROUGHNESS = rough;
 	METALLIC = metal;
@@ -255,6 +258,16 @@ void sky() {
 		col = mix(col, cc, m * 0.9);
 	}
 	COLOR = col;
+}
+"""
+
+const POOL := """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+uniform float night = 0.0;
+void fragment() {
+	float a = COLOR.r;
+	ALBEDO = vec3(1.0, 0.8, 0.48) * a * a * night * 0.5;
 }
 """
 

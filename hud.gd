@@ -20,6 +20,7 @@ signal action_pressed
 signal play_pressed
 signal zoom_pressed(dir: float)
 signal punch_pressed
+signal menu_chosen(id: String)
 
 const NEED_NAMES := {"hambre": "Hambre", "energia": "Energía", "diversion": "Diversión", "social": "Social"}
 
@@ -41,6 +42,7 @@ var stars: Array = []
 var speed_l: Label
 var mission_l: Label
 var punch_b: Button
+var menu_p: PanelContainer
 
 
 class Joy extends Control:
@@ -366,6 +368,39 @@ func set_needs(d: Dictionary) -> void:
 			fill.bg_color = Color(0.95, 0.75, 0.2)
 		else:
 			fill.bg_color = Color(0.92, 0.3, 0.25)
+
+
+func show_menu(title: String, opts: Array) -> void:
+	hide_menu()
+	menu_p = PanelContainer.new()
+	menu_p.add_theme_stylebox_override("panel", _sb(Color(0.07, 0.09, 0.13, 0.95), 20, 22))
+	menu_p.set_anchors_preset(Control.PRESET_CENTER)
+	menu_p.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	menu_p.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 10)
+	menu_p.add_child(vb)
+	var tl := _label(title, 27, Color(1, 0.9, 0.45))
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(tl)
+	for o in opts:
+		var b := _button(str(o[0]), 23, Color(0.16, 0.4, 0.68, 0.97))
+		b.custom_minimum_size = Vector2(560, 58)
+		var id: String = o[1]
+		b.pressed.connect(func(): menu_chosen.emit(id))
+		vb.add_child(b)
+	var cb := _button("Cerrar", 21, Color(0.3, 0.32, 0.36, 0.97))
+	cb.custom_minimum_size = Vector2(560, 50)
+	cb.pressed.connect(func(): menu_chosen.emit(""))
+	vb.add_child(cb)
+	root.add_child(menu_p)
+	root.move_child(menu_p, fade_r.get_index())
+
+
+func hide_menu() -> void:
+	if menu_p != null and is_instance_valid(menu_p):
+		menu_p.queue_free()
+	menu_p = null
 
 
 func set_wanted(n: int) -> void:

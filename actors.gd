@@ -148,31 +148,58 @@ static func car(mat: Material, glow: Material, col: Color, kind: int) -> Node3D:
 		g.box(Vector3(-0.8, 0.6, bl * 0.5 + 0.02), Vector3(0.35, 0.22, 0.05), Color.WHITE)
 		g.box(Vector3(0.8, 0.6, bl * 0.5 + 0.02), Vector3(0.35, 0.22, 0.05), Color.WHITE)
 	else:
-		var l := 4.2
-		var w := 1.8
-		b.box(Vector3(0, 0.3, 0), Vector3(w, 0.5, l), col, true)
-		b.box(Vector3(0, 0.8, 0), Vector3(w - 0.08, 0.07, l - 0.12), col)
-		for sz in [-1.0, 1.0]:
-			b.push_t(Transform3D(Basis(Vector3(1, 0, 0), -sz * 0.6), Vector3(0, 0.84, -0.25 + sz * (l * 0.25 + 0.16))))
-			b.box(Vector3(0, 0, 0), Vector3(w - 0.24, 0.05, 0.62), glass, true)
-			b.pop()
-		b.box(Vector3(0, 0.85, -0.25), Vector3(w - 0.22, 0.48, l * 0.5), glass)
-		b.box(Vector3(0, 1.33, -0.25), Vector3(w - 0.16, 0.07, l * 0.5 + 0.06), col)
+		var w := 1.84
+		var hw := w * 0.5
+		# perfil lateral (z, y), de atrás hacia delante pasando por el techo
+		var prof: Array[Vector2] = [Vector2(-2.12, 0.3), Vector2(-2.15, 0.62), Vector2(-2.02, 0.86), Vector2(-1.42, 0.92), Vector2(-0.98, 1.36), Vector2(0.28, 1.38), Vector2(0.92, 0.96), Vector2(1.86, 0.84), Vector2(2.12, 0.66), Vector2(2.14, 0.3)]
+		var n := prof.size()
+		var wd: Array[float] = []
+		for i in n:
+			wd.append(hw - 0.15 if (i == 4 or i == 5) else hw)
+		for i in n:
+			var j := (i + 1) % n
+			var p0 := prof[i]
+			var p1 := prof[j]
+			var e := p1 - p0
+			var nn := Vector3(0, e.x, -e.y).normalized()
+			var cc := col
+			if i == 3 or i == 5:
+				cc = glass
+			elif i == n - 1:
+				cc = Color(0.07, 0.07, 0.08)
+			b.quad(Vector3(-wd[i], p0.y, p0.x), Vector3(wd[i], p0.y, p0.x), Vector3(wd[j], p1.y, p1.x), Vector3(-wd[j], p1.y, p1.x), nn, cc)
 		for sx in [-1.0, 1.0]:
-			for sz in [-1.0, 1.0]:
-				b.box(Vector3(sx * (w * 0.5 - 0.13), 0.85, -0.25 + sz * l * 0.25), Vector3(0.08, 0.48, 0.08), col)
-			_wheel(b, sx * w * 0.5, 1.3, 0.33, sx)
-			_wheel(b, sx * w * 0.5, -1.3, 0.33, sx)
-			b.box(Vector3(sx * 0.6, 0.55, -l * 0.5 - 0.02), Vector3(0.35, 0.16, 0.04), Color(0.85, 0.1, 0.1))
-			g.box(Vector3(sx * 0.6, 0.55, l * 0.5 + 0.01), Vector3(0.35, 0.16, 0.05), Color.WHITE)
-		b.box(Vector3(0, 0.3, l * 0.5 + 0.02), Vector3(w - 0.1, 0.18, 0.1), Color(0.2, 0.2, 0.22))
-		b.box(Vector3(0, 0.3, -l * 0.5 - 0.02), Vector3(w - 0.1, 0.18, 0.1), Color(0.2, 0.2, 0.22))
+			var sn := Vector3(sx, 0, 0)
+			var cen := Vector3(sx * hw, 0.62, 0.0)
+			for i in n:
+				var j := (i + 1) % n
+				b.tri(cen, Vector3(sx * wd[i], prof[i].y, prof[i].x), Vector3(sx * wd[j], prof[j].y, prof[j].x), sn, sn, sn, col)
+			# ventanillas
+			var xl: float = sx * (hw - 0.012)
+			var xh: float = sx * (hw - 0.118)
+			b.quad(Vector3(xl, 0.98, -0.92), Vector3(xl, 0.98, -0.2), Vector3(xh, 1.3, -0.2), Vector3(xh, 1.3, -0.74), sn, glass)
+			b.quad(Vector3(xl, 0.98, -0.1), Vector3(xl, 0.98, 0.76), Vector3(xh, 1.3, 0.3), Vector3(xh, 1.3, -0.1), sn, glass)
+			b.box(Vector3(sx * (hw + 0.09), 0.98, 0.66), Vector3(0.16, 0.1, 0.09), col)
+			b.box(Vector3(sx * hw, 0.72, -0.5), Vector3(0.03, 0.03, 0.14), Color(0.75, 0.77, 0.8))
+			b.box(Vector3(sx * hw, 0.72, 0.36), Vector3(0.03, 0.03, 0.14), Color(0.75, 0.77, 0.8))
+			_wheel(b, sx * hw, 1.32, 0.34, sx)
+			_wheel(b, sx * hw, -1.32, 0.34, sx)
+			b.m = 1.0
+			b.box(Vector3(sx * 0.62, 0.62, -2.15), Vector3(0.38, 0.13, 0.05), Color(0.85, 0.08, 0.08))
+			b.m = 0.8
+			g.box(Vector3(sx * 0.62, 0.6, 2.11), Vector3(0.4, 0.14, 0.07), Color.WHITE)
+		b.m = 1.0
+		b.box(Vector3(0, 0.26, 2.12), Vector3(w - 0.04, 0.22, 0.14), Color(0.12, 0.12, 0.14))
+		b.box(Vector3(0, 0.26, -2.13), Vector3(w - 0.04, 0.22, 0.14), Color(0.12, 0.12, 0.14))
+		b.box(Vector3(0, 0.5, 2.14), Vector3(0.8, 0.12, 0.04), Color(0.05, 0.05, 0.06))
+		b.box(Vector3(0, 0.46, -2.16), Vector3(0.5, 0.12, 0.03), Color(0.92, 0.92, 0.9))
+		b.m = 0.8
 		if kind == 1:
-			b.box(Vector3(0, 1.4, -0.25), Vector3(0.6, 0.18, 0.25), Color(0.1, 0.1, 0.1))
+			b.box(Vector3(0, 1.38, -0.35), Vector3(0.6, 0.18, 0.25), Color(0.1, 0.1, 0.1))
 		if kind == 3:
-			b.box(Vector3(0, 0.42, 0.0), Vector3(w + 0.03, 0.22, l * 0.45), Color(0.06, 0.07, 0.1))
-			b.box(Vector3(0, 0.805, 1.35), Vector3(w - 0.3, 0.07, 1.2), Color(0.06, 0.07, 0.1))
-			b.box(Vector3(0, 1.4, -0.25), Vector3(1.3, 0.08, 0.34), Color(0.1, 0.1, 0.12))
+			for sx in [-1.0, 1.0]:
+				b.box(Vector3(sx * (hw + 0.005), 0.42, -0.2), Vector3(0.03, 0.32, 1.9), Color(0.06, 0.07, 0.1))
+			b.box(Vector3(0, 1.38, -0.35), Vector3(1.3, 0.08, 0.34), Color(0.1, 0.1, 0.12))
 	b.instance(root, mat)
 	g.instance(root, glow, false)
 	if kind == 3:
@@ -188,7 +215,7 @@ static func car(mat: Material, glow: Material, col: Color, kind: int) -> Node3D:
 			bx.material = lm
 			var li := MeshInstance3D.new()
 			li.mesh = bx
-			li.position = Vector3(sx * 0.32, 1.56, -0.25)
+			li.position = Vector3(sx * 0.32, 1.54, -0.35)
 			li.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			root.add_child(li)
 			bar.append(li)

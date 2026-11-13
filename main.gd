@@ -5,6 +5,10 @@ const World = preload("res://world.gd")
 const Actors = preload("res://actors.gd")
 const Hud = preload("res://hud.gd")
 const Shaders = preload("res://shaders.gd")
+const MB = preload("res://mb.gd")
+const HOUSE_KINDS := ["casaA", "casaB", "piso"]
+const LOOT := {"super": [150, 300], "cafe": [80, 160], "muebles": [200, 350], "gym": [100, 200], "gasolinera": [200, 400], "banco": [900, 1600]}
+const HOME_UPG := [["alarm", "Alarma y escondite", 400, "Alarma instalada: al entrar en esta casa pierdes las estrellas."], ["rent", "Habitación de alquiler", 700, "Habitación alquilada: +§60 cada día."], ["pool", "Piscina en el jardín", 900, "Piscina construida: la casa vale más y te da +§40 cada día."]]
 
 const NAMES_F := ["Marta", "Lucía", "Carmen", "Sofía", "Elena", "Paula", "Irene", "Nuria", "Alba", "Rocío", "Inés", "Clara", "Vera", "Noa"]
 const NAMES_M := ["Hugo", "Dani", "Pablo", "Javi", "Álex", "Mario", "Iván", "Leo", "Rubén", "Óscar", "Luis", "Marcos", "Adrián", "Sergio"]
@@ -77,6 +81,20 @@ var m_markers: Array = []
 var traffic_t := 0.0
 var ai_made := 0
 var smoke: CPUParticles3D
+# --- casas, coches y atracos
+var houses: Dictionary = {}
+var house_marks: Dictionary = {}
+var pool_nodes: Dictionary = {}
+var home_idx := -1
+var cur_door := -1
+var cur_owned := false
+var menu_cb: Callable
+var menu_ctx: Dictionary = {}
+var rob_cd: Dictionary = {}
+var hands: Dictionary = {}
+var no_hide_t := 0.0
+var my_car: Dictionary = {}
+var mycar_data: Dictionary = {}
 var shots_dir := ""
 
 
@@ -98,11 +116,19 @@ func _ready() -> void:
 	add_child(hud)
 	hud.action_pressed.connect(_do_action)
 	hud.punch_pressed.connect(_punch)
+	hud.menu_chosen.connect(_on_menu)
 	_setup_gta()
 	hud.play_pressed.connect(_on_play)
 	hud.zoom_pressed.connect(func(dir): cam_dist = clampf(cam_dist + dir * 2.5, 4.5, 26.0))
+	for i in W.doors.size():
+		if W.doors[i].kind == "hogar":
+			home_idx = i
 	_load()
+	if not houses.has(str(home_idx)):
+		houses[str(home_idx)] = {}
 	_apply_owned()
+	_apply_houses()
+	_restore_car()
 	_update_time(0.0)
 	if OS.get_environment("CM_TEST") != "":
 		shots_dir = OS.get_environment("CM_SHOTS")
@@ -122,8 +148,8 @@ func _setup_env() -> void:
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.adjustment_enabled = true
-	env.adjustment_contrast = 1.04
-	env.adjustment_saturation = 1.06
+	env.adjustment_contrast = 1.07
+	env.adjustment_saturation = 0.98
 	env.fog_enabled = true
 	env.fog_density = 0.0007
 	env.fog_sky_affect = 0.25
@@ -305,7 +331,7 @@ func _new_car(kind: int, col: Color, p: Vector3, yaw: float, mode: String) -> Di
 	var top := rng.randf_range(15.0, 18.0)
 	if kind == 2:
 		top = 11.0
-	var c := {"node": node, "pos": p, "b": Vector2i.ZERO, "d": Vector2i(0, 1), "pts": [], "speed": 0.0, "max": 6.5 if kind == 2 else rng.randf_range(7.5, 10.0), "yaw": yaw, "stuck": 0.0, "free": 0.0, "len": 5.5 if kind == 2 else 3.0, "mode": mode, "kind": kind, "hp": 100.0, "r": 2.3 if kind == 2 else 1.5, "top": top, "tgt": Vector3.ZERO, "has_tgt": false, "temp": false}
+	var c := {"node": node, "pos": p, "b": Vector2i.ZERO, "d": Vector2i(0, 1), "pts": [], "speed": 0.0, "max": 6.5 if kind == 2 else rng.randf_range(7.5, 10.0), "yaw": yaw, "stuck": 0.0, "free": 0.0, "len": 5.5 if kind == 2 else 3.0, "mode": mode, "kind": kind, "hp": 100.0, "r": 2.3 if kind == 2 else 1.5, "top": top, "tgt": Vector3.ZERO, "has_tgt": false, "temp": false, "base_top": top, "engine": 0, "armor": 0, "maxhp": 100.0, "mine": false, "col": col}
 	cars.append(c)
 	return c
 
@@ -478,6 +504,7 @@ func _update_time(dt: float) -> void:
 	if time_h >= 24.0:
 		time_h -= 24.0
 		day = (day + 1) % 7
+		_new_day()
 	var f := clampf(sin((time_h - 6.0) / 12.0 * PI), 0.0, 1.0)
 	var fs := smoothstep(0.0, 0.35, f)
 	var dusk := clampf(1.0 - absf(f - 0.12) / 0.2, 0.0, 1.0) * clampf(f * 25.0, 0.0, 1.0)
@@ -501,6 +528,7 @@ func _update_time(dt: float) -> void:
 		W.mat_glow.set_shader_parameter("sky_col", hor.lerp(top, 0.4))
 		W.mat_water.set_shader_parameter("sky_col", hor.lerp(top, 0.5))
 	W.mat_glow.set_shader_parameter("night", night)
+	W.mat_pool.set_shader_parameter("night", night)
 
 func _clock_text() -> String:
 	var h := int(time_h)
@@ -513,6 +541,7 @@ func _advance(hours: float) -> void:
 	while time_h >= 24.0:
 		time_h -= 24.0
 		day = (day + 1) % 7
+		_new_day()
 	var gh := hours
 	needs.hambre = maxf(0.0, needs.hambre - 2.0 * gh)
 	needs.social = maxf(0.0, needs.social - 1.2 * gh)
@@ -683,6 +712,10 @@ func _update_action() -> void:
 		for s in W.spots:
 			if s.room != inside:
 				continue
+			if s.get("own", false) and not cur_owned:
+				continue
+			if s.id == "hablar" and cur_owned and W.statics[s.who].role == "host":
+				continue
 			var sp: Vector3 = s.pos
 			var d := Vector2(sp.x - ppos.x, sp.z - ppos.z).length()
 			if d < 1.8 and d < bd:
@@ -695,6 +728,9 @@ func _update_action() -> void:
 		if absf(driving.speed) < 5.0:
 			best = {"type": "exit"}
 			label = "Salir del coche"
+			if Vector2(W.taller_pos.x - ppos.x, W.taller_pos.z - ppos.z).length() < 5.0:
+				best = {"type": "taller"}
+				label = "Abrir el taller"
 	else:
 		for c in cars:
 			if c.mode != "ai" and c.mode != "parked":
@@ -749,9 +785,19 @@ func _do_action() -> void:
 	if a.type == "exit":
 		_exit_car()
 		return
+	if a.type == "taller":
+		_taller_menu()
+		return
 	if a.type == "door":
-		if wanted > 0 and pol_near < 30.0:
+		var didx: int = W.doors.find(a.door)
+		var mine := houses.has(str(didx))
+		var alarm: bool = mine and houses[str(didx)].get("alarm", false)
+		if wanted > 0 and pol_near < 30.0 and not alarm:
 			hud.toast("¡La policía te está viendo! Aléjate antes de esconderte.")
+			return
+		if HOUSE_KINDS.has(a.door.kind) and not mine:
+			menu_ctx = {"door": a.door, "idx": didx}
+			_menu("%s — en venta" % a.door.name, [["Visitar a los vecinos", "visit"], ["Comprar por §%d" % _house_price(didx), "buy"]], _on_house_menu)
 			return
 		_enter(a.door)
 	elif a.type == "npc":
@@ -814,6 +860,17 @@ func _do_spot(s: Dictionary) -> void:
 		var gain := 40.0 if owned.has("tele") else 22.0
 		_add("diversion", gain)
 		hud.toast("Has visto tu serie favorita.  Diversión +%d" % int(gain))
+	elif id == "snack":
+		if _pay(6):
+			_add("hambre", 18.0)
+			hud.toast("Un bocadillo de gasolinera.  Hambre +18")
+	elif id == "mejoras":
+		_home_menu()
+		return
+	elif id == "hablar" and W.statics[s.who].role != "host" and W.statics[s.who].role != "guard":
+		menu_ctx = {"who": s.who, "room": s.room}
+		_menu(W.statics[s.who].name, [["Charlar un rato", "talk"], ["¡Esto es un atraco!", "rob"]], _on_staff_menu)
+		return
 	elif id == "hablar":
 		var st: Dictionary = W.statics[s.who]
 		var who: String = host_name if st.role == "host" else st.name
@@ -863,6 +920,21 @@ func _goto_room(door: Dictionary) -> void:
 	var dd: Vector3 = door.dir
 	inside = door.kind
 	place_name = door.name
+	cur_door = W.doors.find(door)
+	if inside == "hogar":
+		cur_door = home_idx
+	cur_owned = houses.has(str(cur_door))
+	for i in W.statics.size():
+		if W.statics[i].room == inside and W.statics[i].role == "host":
+			static_nodes[i].visible = not cur_owned
+	if cur_owned:
+		place_name = "Casa Mirasol" if inside == "hogar" else "Tu casa"
+		if wanted > 0 and houses[str(cur_door)].get("alarm", false):
+			wanted = 0
+			evade_t = 0.0
+			no_hide_t = 0.0
+			_clear_police()
+			hud.toast("Estás a salvo en casa: la policía te ha perdido la pista.")
 	return_pos = dp + dd * 0.4
 	return_yaw = atan2(dd.x, dd.z)
 	var dname: String = door.name
@@ -957,6 +1029,17 @@ func _process(dt: float) -> void:
 		_update_npcs(dt)
 		_update_cars(dt)
 	crash_cd = maxf(0.0, crash_cd - dt)
+	no_hide_t = maxf(0.0, no_hide_t - dt)
+	for rk in rob_cd.keys():
+		rob_cd[rk] = maxf(0.0, rob_cd[rk] - dt)
+	for who in hands.keys():
+		hands[who] -= dt
+		var hl: Array = static_nodes[who].get_meta("limbs")
+		var up := -2.9 if hands[who] > 0.0 else 0.0
+		hl[2].rotation.x = up
+		hl[3].rotation.x = up
+		if hands[who] <= 0.0:
+			hands.erase(who)
 	_update_police(dt)
 	_update_mission(dt)
 	_tick_traffic(dt)
@@ -974,6 +1057,10 @@ func _process(dt: float) -> void:
 			dots.append([mp, Color(0.4, 0.95, 1.0)])
 	elif mission.type != "huida":
 		dots.append([mission.pts[mission.stage], Color(1.0, 0.85, 0.1)])
+	for hk in houses:
+		var hd: Vector3 = W.doors[int(hk)].pos
+		dots.append([hd, Color(0.3, 1.0, 0.45)])
+	dots.append([W.taller_pos, Color(1.0, 0.6, 0.1)])
 	for pc2 in police:
 		dots.append([pc2.pos, Color(0.25, 0.45, 1.0) if (Time.get_ticks_msec() / 300) % 2 == 0 else Color(1.0, 0.2, 0.2)])
 	hud.mini.dots = dots
@@ -1170,7 +1257,7 @@ func _drive(dt: float, jv: Vector2) -> void:
 		if sp < 0.0:
 			sp += 20.0 * thr * dt
 		else:
-			sp += 9.5 * thr * dt * (1.0 - 0.55 * sp / top)
+			sp += 9.5 * (1.0 + 0.15 * float(c.engine)) * thr * dt * (1.0 - 0.55 * sp / top)
 	elif thr < -0.1:
 		if sp > 0.5:
 			sp += 22.0 * thr * dt
@@ -1373,7 +1460,8 @@ func _update_police(dt: float) -> void:
 		return
 	if inside != "":
 		pol_near = 1e9
-		evade_t += dt
+		if no_hide_t <= 0.0:
+			evade_t += dt
 	else:
 		var counts: Array[int] = [0, 1, 2, 2, 3, 4]
 		pol_t -= dt
@@ -1445,7 +1533,7 @@ func _tick_traffic(dt: float) -> void:
 		var c: Dictionary = cars[k]
 		if c.mode == "ai":
 			ai += 1
-		elif c.mode == "parked" and c.temp:
+		elif c.mode == "parked" and c.temp and not c.mine:
 			var cp: Vector3 = c.pos
 			if cp.distance_to(ppos) > 140.0:
 				var node: Node3D = c.node
@@ -1539,6 +1627,220 @@ func _update_mission(dt: float) -> void:
 			hud.toast(mission.hints[mission.stage])
 
 
+# ---------------------------------------------------------------- menús, casas, taller y atracos
+
+func _menu(title: String, opts: Array, cb: Callable) -> void:
+	busy = true
+	menu_cb = cb
+	hud.show_menu(title, opts)
+
+
+func _on_menu(id: String) -> void:
+	busy = false
+	hud.hide_menu()
+	if id != "" and menu_cb.is_valid():
+		menu_cb.call(id)
+
+
+func _house_price(idx: int) -> int:
+	if W.doors[idx].kind == "piso":
+		return 1300 + (idx % 4) * 100
+	return 2400 + (idx * 137 % 9) * 150
+
+
+func _on_house_menu(id: String) -> void:
+	var door: Dictionary = menu_ctx.door
+	var idx: int = menu_ctx.idx
+	if id == "visit":
+		_enter(door)
+	elif id == "buy":
+		var price := _house_price(idx)
+		if _pay(price):
+			houses[str(idx)] = {}
+			_apply_houses()
+			hud.toast("¡Has comprado esta casa por §%d! Entra para mejorarla." % price)
+			_save()
+
+
+func _apply_houses() -> void:
+	for hk in houses:
+		var door: Dictionary = W.doors[int(hk)]
+		var dp: Vector3 = door.pos
+		var dd: Vector3 = door.dir
+		if not house_marks.has(hk):
+			house_marks[hk] = W._label("TU CASA", dp + Vector3(0, 4.3, 0), 0.008, Color(0.45, 1.0, 0.55), true)
+		if houses[hk].get("pool", false) and not pool_nodes.has(hk) and door.kind != "piso":
+			var b = MB.new()
+			var wb = MB.new()
+			var pp := dp + Vector3(4.6, 0.16, dd.z * 3.4)
+			b.m = 0.6
+			b.box(pp, Vector3(5.0, 0.2, 3.4), Color(0.85, 0.84, 0.8))
+			wb.flat(pp + Vector3(0, 0.22, 0), 4.2, 2.6, Color.WHITE)
+			b.m = 1.0
+			b.box(pp + Vector3(2.9, 0, 0), Vector3(0.5, 0.35, 1.6), Color(0.95, 0.4, 0.3))
+			var holder := Node3D.new()
+			add_child(holder)
+			b.instance(holder, W.mat_solid)
+			wb.instance(holder, W.mat_water, false)
+			W.add_col(pp.x, pp.z, 5.0, 3.4)
+			pool_nodes[hk] = holder
+
+
+func _home_menu() -> void:
+	var h: Dictionary = houses[str(cur_door)]
+	var opts: Array = []
+	for u in HOME_UPG:
+		if h.get(u[0], false):
+			opts.append(["%s — ya la tienes" % u[1], u[0]])
+		else:
+			opts.append(["%s — §%d" % [u[1], u[2]], u[0]])
+	_menu("Mejoras de la casa", opts, _on_home_upg)
+
+
+func _on_home_upg(id: String) -> void:
+	var h: Dictionary = houses[str(cur_door)]
+	for u in HOME_UPG:
+		if u[0] != id:
+			continue
+		if h.get(id, false):
+			hud.toast("Esa mejora ya está hecha.")
+		elif id == "pool" and W.doors[cur_door].kind == "piso":
+			hud.toast("Un piso no tiene jardín para la piscina.")
+		elif _pay(u[2]):
+			h[id] = true
+			_apply_houses()
+			hud.toast(u[3])
+			_save()
+
+
+func _new_day() -> void:
+	var inc := 0
+	for hk in houses:
+		if houses[hk].get("rent", false):
+			inc += 60
+		if houses[hk].get("pool", false):
+			inc += 40
+	if inc > 0:
+		money += inc
+		if hud != null:
+			hud.toast("Ingresos de tus casas: +§%d" % inc)
+
+
+func _on_staff_menu(id: String) -> void:
+	var who: int = menu_ctx.who
+	var room: String = menu_ctx.room
+	var st: Dictionary = W.statics[who]
+	if id == "talk":
+		_add("social", 14.0)
+		hud.toast("%s: «%s»" % [st.name, PHRASES[rng.randi() % PHRASES.size()]])
+		return
+	if float(rob_cd.get(room, 0.0)) > 0.0:
+		hud.toast("%s: «¡Ya me han robado hoy, la caja está vacía!»" % st.name)
+		return
+	var rg: Array = LOOT[room]
+	var loot := rng.randi_range(rg[0], rg[1])
+	money += loot
+	rob_cd[room] = 300.0
+	var stars := 2
+	if room == "banco":
+		stars = 4
+	elif room == "gasolinera":
+		stars = 3
+	wanted = maxi(wanted, stars)
+	evade_t = 0.0
+	no_hide_t = 45.0
+	hands[who] = 8.0
+	hud.toast("¡ATRACO! Te llevas §%d. ¡Sal corriendo, que viene la policía!" % loot)
+	_save()
+
+
+func _repaint(c: Dictionary, col: Color) -> void:
+	var old: Node3D = c.node
+	var node := Actors.car(W.mat_solid, W.mat_glow, col, c.kind)
+	add_child(node)
+	node.position = old.position
+	node.rotation = old.rotation
+	old.queue_free()
+	c.node = node
+	c.col = col
+
+
+func _claim(c: Dictionary) -> void:
+	for o in cars:
+		o.mine = false
+	c.mine = true
+	c.temp = false
+	my_car = c
+
+
+func _tune(c: Dictionary) -> void:
+	c.top = float(c.base_top) * (1.0 + 0.12 * float(c.engine))
+	c.maxhp = 100.0 + 60.0 * float(c.armor)
+
+
+func _taller_menu() -> void:
+	var c := driving
+	var eng := "Motor al máximo" if int(c.engine) >= 3 else "Motor nivel %d — §300" % (int(c.engine) + 1)
+	var arm := "Blindaje al máximo" if int(c.armor) >= 3 else "Blindaje nivel %d — §250" % (int(c.armor) + 1)
+	_menu("Taller Ruta 7", [["Reparar el coche — §40", "fix"], [eng, "engine"], [arm, "armor"], ["Pintura nueva — §60", "paint"], ["Salir del coche", "exit"]], _on_taller)
+
+
+func _on_taller(id: String) -> void:
+	if driving.is_empty():
+		return
+	var c := driving
+	if id == "exit":
+		_exit_car()
+	elif id == "fix":
+		if float(c.hp) >= float(c.maxhp):
+			hud.toast("El coche ya está como nuevo.")
+		elif _pay(40):
+			c.hp = c.maxhp
+			hud.toast("Coche reparado.")
+	elif id == "engine":
+		if int(c.engine) >= 3:
+			hud.toast("El motor ya está al máximo.")
+		elif _pay(300):
+			c.engine += 1
+			_tune(c)
+			_claim(c)
+			hud.toast("Motor mejorado: más velocidad y aceleración. Este es ahora tu coche.")
+	elif id == "armor":
+		if int(c.armor) >= 3:
+			hud.toast("El blindaje ya está al máximo.")
+		elif _pay(250):
+			c.armor += 1
+			_tune(c)
+			c.hp = c.maxhp
+			_claim(c)
+			hud.toast("Blindaje mejorado: aguanta más golpes. Este es ahora tu coche.")
+	elif id == "paint":
+		if _pay(60):
+			_repaint(c, Color.from_hsv(rng.randf(), 0.78, 0.82))
+			_claim(c)
+			hud.toast("Pintura nueva. Este es ahora tu coche.")
+	_save()
+
+
+func _restore_car() -> void:
+	if mycar_data.is_empty():
+		return
+	var best: Dictionary = {}
+	for c in cars:
+		if c.mode == "parked" and (best.is_empty() or c.pos.distance_to(W.spawn) < best.pos.distance_to(W.spawn)):
+			best = c
+	if best.is_empty():
+		return
+	best.engine = clampi(int(mycar_data.get("engine", 0)), 0, 3)
+	best.armor = clampi(int(mycar_data.get("armor", 0)), 0, 3)
+	_tune(best)
+	best.hp = best.maxhp
+	var col = mycar_data.get("col", best.col)
+	if col is Color:
+		_repaint(best, col)
+	_claim(best)
+
+
 # ---------------------------------------------------------------- guardado
 
 func _save() -> void:
@@ -1550,6 +1852,9 @@ func _save() -> void:
 	cf.set_value("g", "owned", owned)
 	cf.set_value("g", "time", time_h)
 	cf.set_value("g", "day", day)
+	cf.set_value("g", "houses", houses)
+	if not my_car.is_empty():
+		cf.set_value("g", "mycar", {"col": my_car.col, "engine": my_car.engine, "armor": my_car.armor})
 	cf.save(SAVE_PATH)
 
 
@@ -1570,6 +1875,14 @@ func _load() -> void:
 		owned = ow
 	time_h = float(cf.get_value("g", "time", time_h))
 	day = int(cf.get_value("g", "day", day))
+	var hs = cf.get_value("g", "houses", {})
+	if hs is Dictionary:
+		for hk in hs:
+			if int(hk) >= 0 and int(hk) < W.doors.size() and hs[hk] is Dictionary:
+				houses[str(hk)] = hs[hk]
+	var mc = cf.get_value("g", "mycar", {})
+	if mc is Dictionary:
+		mycar_data = mc
 
 
 # ---------------------------------------------------------------- prueba automática
@@ -1667,11 +1980,16 @@ func _run_test() -> void:
 		if s.id == "salir":
 			continue
 		inside = s.room
+		cur_owned = s.get("own", false)
+		cur_door = home_idx
 		ppos = s.pos
 		_update_action()
 		if cur_action.is_empty():
 			print("CM_FALLO sin acción en ", s.label)
 		await _do_spot(s)
+		if busy and hud.menu_p != null:
+			_on_menu("talk" if s.id == "hablar" else "")
+	cur_owned = false
 	# paseo con colisiones y entrada por una puerta real
 	_tp(W.spawn, 0.0, 0.45, 10.0)
 	await _frames(3)
@@ -1790,6 +2108,95 @@ func _run_test() -> void:
 	if not driving.is_empty():
 		print("CM_FALLO no se puede salir del coche")
 	await _frames(20)
+	# --- casas, taller y atracos
+	wanted = 0
+	_clear_police()
+	money = 20000
+	var hidx := -1
+	for i in W.doors.size():
+		if HOUSE_KINDS.has(W.doors[i].kind) and W.doors[i].kind != "piso":
+			hidx = i
+			break
+	inside = ""
+	ppos = W.doors[hidx].pos
+	_update_action()
+	_do_action()
+	if hud.menu_p == null:
+		print("CM_FALLO no sale el menú de compra")
+	await _frames(3)
+	await _shot("16_menu_casa")
+	_on_menu("buy")
+	if not houses.has(str(hidx)):
+		print("CM_FALLO no se compra la casa")
+	_goto_room(W.doors[hidx])
+	if not cur_owned:
+		print("CM_FALLO la casa comprada no es tuya")
+	_home_menu()
+	_on_menu("alarm")
+	_home_menu()
+	_on_menu("rent")
+	_home_menu()
+	_on_menu("pool")
+	var m1 := money
+	_new_day()
+	if money != m1 + 100 or not pool_nodes.has(str(hidx)):
+		print("CM_FALLO mejoras de casa")
+	wanted = 3
+	_goto_room(W.doors[hidx])
+	if wanted != 0:
+		print("CM_FALLO la alarma no quita estrellas")
+	await _exit()
+	_tp(W.doors[hidx].pos + Vector3(3, 0, 6), 0.5, 0.4, 13.0)
+	await _frames(6)
+	await _shot("17_mi_casa")
+	for room in LOOT:
+		var who := -1
+		for i in W.statics.size():
+			if W.statics[i].room == room and W.statics[i].role != "guard":
+				who = i
+		wanted = 0
+		var m2 := money
+		menu_ctx = {"who": who, "room": room}
+		_on_staff_menu("rob")
+		if money <= m2 or wanted < 2:
+			print("CM_FALLO atraco en ", room)
+		print("CM_INFO atraco ", room, " botín=", money - m2, " estrellas=", wanted)
+	_goto_room({"pos": W.spawn, "dir": Vector3(0, 0, 1), "kind": "banco", "name": "Banco Mirasol"})
+	ppos = W.rooms["banco"].origin + Vector3(0, 0, -0.8)
+	await _frames(8)
+	await _shot("18_atraco_banco")
+	inside = ""
+	wanted = 0
+	_clear_police()
+	hands.clear()
+	var tc: Dictionary = {}
+	for c in cars:
+		if c.mode == "parked":
+			tc = c
+			break
+	tc.pos = W.taller_pos
+	_enter_car(tc)
+	await _frames(3)
+	_update_action()
+	if cur_action.is_empty() or cur_action.type != "taller":
+		print("CM_FALLO el taller no responde")
+	_do_action()
+	await _frames(3)
+	await _shot("19_taller_menu")
+	_on_menu("engine")
+	_taller_menu()
+	_on_menu("armor")
+	_taller_menu()
+	_on_menu("paint")
+	if int(tc.engine) != 1 or int(tc.armor) != 1 or not tc.mine or float(tc.top) <= float(tc.base_top):
+		print("CM_FALLO mejoras de coche")
+	cam_yaw = 2.4
+	cam_pitch = 0.3
+	cam_dist = 13.0
+	cam_snap = true
+	await _frames(8)
+	await _shot("20_gasolinera")
+	_exit_car()
 	print("CM_STATS puertas=%d colisiones=%d vecinos=%d coches=%d salas=%d" % [W.doors.size(), W.colliders.size(), npcs.size(), cars.size(), W.rooms.size()])
 	print("CM_TEST_OK")
 	get_tree().quit()
